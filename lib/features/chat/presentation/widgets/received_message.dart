@@ -280,7 +280,7 @@ class ReceivedMessage extends StatelessWidget {
                             message.content!.isNotEmpty)
                           Text(
                             message.content!,
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
 
                         Padding(

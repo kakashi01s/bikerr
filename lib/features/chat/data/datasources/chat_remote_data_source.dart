@@ -94,24 +94,53 @@ class ChatRemoteDataSource implements ChatDataSource {
 
       if (response.statusCode == 200) {
         final decodedJson = jsonDecode(response.body);
-        // Assuming backend response structure: { success: true, message: "...", data: { chatRoom: {...}, messages: [...], pagination: {...} } }
-        if (decodedJson['data'] != null &&
-            decodedJson['data'] is Map<String, dynamic>) {
-          return Left(
-            Result.success(decodedJson['data'] as Map<String, dynamic>),
-          );
-        } else {
+
+        String URL2 =
+            '${AppUrl.updateLastReadMessages}/$chatRoomId';
+
+        print(
+          '[ChatRemoteDataSource] Updating Last Read for Chat Room after fetching messages: $url',
+        );
+
+        final response2 = await _api.putApi(URL2,{});
+
+        if(response2.statusCode == 200)
+        {
+          // Assuming backend response structure: { success: true, message: "...", data: { chatRoom: {...}, messages: [...], pagination: {...} } }
+          if (decodedJson['data'] != null &&
+              decodedJson['data'] is Map<String, dynamic>) {
+            print(
+              '[ChatRemoteDataSource] Sending latest messages to bloc',
+            );
+            return Left(
+              Result.success(decodedJson['data'] as Map<String, dynamic>),
+            );
+          } else {
+            print(
+              '[ChatRemoteDataSource] inside unread check Error: API response data structure unexpected or missing data field for _fetchMessages.',
+            );
+            return Right(
+              ApiError(
+                message:
+                decodedJson['message'] ??
+                    ' inside unrRead check  : Invalid API response data structure: Missing or invalid "data" field.',
+              ),
+            );
+          }
+        }
+        else {
           print(
             '[ChatRemoteDataSource] Error: API response data structure unexpected or missing data field for _fetchMessages.',
           );
           return Right(
             ApiError(
               message:
-                  decodedJson['message'] ??
+              decodedJson['message'] ??
                   'Invalid API response data structure: Missing or invalid "data" field.',
             ),
           );
         }
+
       } else {
         String errorMessage = 'Failed to fetch messages and chat details';
         try {

@@ -1,4 +1,3 @@
-import 'package:awesome_snackbar_content/awesome_snackbar_content.dart';
 import 'package:bikerr/config/constants.dart';
 import 'package:bikerr/config/routes/route_names.dart';
 import 'package:bikerr/features/auth/presentation/bloc/auth_bloc.dart';
@@ -192,14 +191,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                   backgroundColor: Colors.transparent,
                                   duration: Duration(seconds: 5),
 
-                                  content: AwesomeSnackbarContent(
-                                    title:
-                                        '${widget.email} Registered Successfully ',
-                                    message: 'Please move forward with login!',
-
-                                    /// change contentType to ContentType.success, ContentType.warning or ContentType.help for variants
-                                    contentType: ContentType.success,
-                                  ),
+                                  content: Text("User Registered Successfully!"),
                                 );
 
                                 ScaffoldMessenger.of(context)
@@ -222,13 +214,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                   backgroundColor: Colors.transparent,
                                   duration: Duration(seconds: 5),
 
-                                  content: AwesomeSnackbarContent(
-                                    title: 'Otp Verified!',
-                                    message: 'Create a New Password',
-
-                                    /// change contentType to ContentType.success, ContentType.warning or ContentType.help for variants
-                                    contentType: ContentType.success,
-                                  ),
+                                  content: Text("OTP Verified"),
                                 );
 
                                 ScaffoldMessenger.of(context)
@@ -287,14 +273,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                                       backgroundColor: Colors.transparent,
                                       duration: Duration(seconds: 5),
 
-                                      content: AwesomeSnackbarContent(
-                                        title: 'Wrong Way',
-                                        message:
-                                            'The function youre trying is invalid , Please fall back ',
-
-                                        /// change contentType to ContentType.success, ContentType.warning or ContentType.help for variants
-                                        contentType: ContentType.success,
-                                      ),
+                                      content: Text("Invalid"),
                                     );
 
                                     ScaffoldMessenger.of(context)

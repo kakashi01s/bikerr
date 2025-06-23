@@ -1,6 +1,6 @@
-import 'package:awesome_snackbar_content/awesome_snackbar_content.dart';
 import 'package:bikerr/config/constants.dart';
 import 'package:bikerr/config/routes/route_names.dart';
+import 'package:bikerr/core/theme.dart';
 import 'package:bikerr/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:bikerr/features/auth/presentation/widgets/login_prompt.dart';
 import 'package:bikerr/utils/di/service_locator.dart';
@@ -103,15 +103,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 elevation: 0,
                                 behavior: SnackBarBehavior.floating,
                                 backgroundColor: Colors.transparent,
-                                duration: Duration(seconds: 5),
+                                duration: Duration(seconds: 5), content: Text("Logged In Successfully!"),
 
-                                content: AwesomeSnackbarContent(
-                                  title: 'Logged in Successfully ',
-                                  message: 'Welcome to Biker',
-
-                                  /// change contentType to ContentType.success, ContentType.warning or ContentType.help for variants
-                                  contentType: ContentType.success,
-                                ),
                               );
 
                               ScaffoldMessenger.of(context)
@@ -133,13 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 backgroundColor: Colors.transparent,
                                 duration: Duration(seconds: 5),
 
-                                content: AwesomeSnackbarContent(
-                                  title: 'Login Failed ',
-                                  message: state.message,
-
-                                  /// change contentType to ContentType.success, ContentType.warning or ContentType.help for variants
-                                  contentType: ContentType.failure,
-                                ),
+                                content: Text("Logged In Successfully!"),
                               );
 
                               ScaffoldMessenger.of(context)
@@ -153,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   PostApiStatus.loading) {
                                 return Center(
                                   child: CircularProgressIndicator(
-                                    color: DefaultColors.failureRed,
+                                    color: AppColors.bikerrRedFill,
                                   ),
                                 );
                               }

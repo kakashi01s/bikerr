@@ -31,7 +31,10 @@ class ConversationRemoteDataSource {
       final decodedJson = jsonDecode(response.body);
       //   print('JSON CONVERSATION DATA =======>   $decodedJson');
       return Left(Result.success(decodedJson as Map<String, dynamic>));
-    } else {
+    } else if (response.statusCode == 404){
+      return Right(ApiError(message: "No Messages Found"));
+    }
+    else {
       return Right(ApiError(message: 'Failed to Fetch Conversations'));
     }
   }

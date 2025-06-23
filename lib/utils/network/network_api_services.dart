@@ -152,7 +152,7 @@ class NetworkServicesApi implements BaseApiServices {
           response = await requestFn(newHeaders);
 
           // Check the status of the retried request
-          if (response.statusCode >= 200 && response.statusCode < 300) {
+          if (response.statusCode >= 200 && response.statusCode < 300 && response.statusCode == 404) {
             return response; // Success after retry
           } else if (response.statusCode == 401 || response.statusCode == 403) {
             // If retry also fails with 401/403, the new token is bad or permission denied
@@ -183,10 +183,14 @@ class NetworkServicesApi implements BaseApiServices {
       }
 
       // If the original response was not 401 and is successful
-      if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.statusCode >= 200 && response.statusCode < 300 ) {
         return response;
       }
 
+
+      if(response.statusCode == 404){
+        return response;
+      }
       // If the original response was not 401 but was an error status code
       print("[API] Final Response Status: ${response.statusCode}");
       print("[API] Final Response Body: ${response.body}");

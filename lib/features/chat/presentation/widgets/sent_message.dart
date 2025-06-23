@@ -378,7 +378,7 @@ class SentMessage extends StatelessWidget {
                         message.content!,
                         style: Theme.of(
                           context,
-                        ).textTheme.bodyMedium?.copyWith(color: Colors.white),
+                        ).textTheme.bodySmall?.copyWith(color: Colors.white),
                       ),
 
                     Row(

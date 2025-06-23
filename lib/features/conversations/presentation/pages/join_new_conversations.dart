@@ -1,3 +1,4 @@
+import 'package:bikerr/config/routes/route_names.dart';
 import 'package:bikerr/features/conversations/presentation/bloc/conversation_bloc.dart';
 import 'package:bikerr/features/conversations/presentation/widgets/chat_room_list_item.dart';
 import 'package:bikerr/utils/enums/enums.dart';
@@ -223,7 +224,7 @@ class _JoinNewConversationsState extends State<JoinNewConversations> {
           floatingActionButton: FloatingActionButton(
             onPressed: () {
               print('FAB tapped: Create New Group');
-              // TODO: Navigate to a "Create Group" screen
+              Navigator.pushNamed(context, RoutesName.createChatGroupsScreen);
             },
             child: const Icon(Icons.add),
           ),

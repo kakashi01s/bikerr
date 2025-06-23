@@ -1,6 +1,6 @@
-import 'package:awesome_snackbar_content/awesome_snackbar_content.dart';
 import 'package:bikerr/config/constants.dart';
 import 'package:bikerr/config/routes/route_names.dart';
+import 'package:bikerr/core/theme.dart';
 import 'package:bikerr/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:bikerr/utils/di/service_locator.dart';
 import 'package:bikerr/utils/enums/enums.dart';
@@ -116,13 +116,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                 backgroundColor: Colors.transparent,
                                 duration: Duration(seconds: 5),
 
-                                content: AwesomeSnackbarContent(
-                                  title: 'Reset Password Successful ',
-                                  message: 'Welcome to Biker',
-
-                                  /// change contentType to ContentType.success, ContentType.warning or ContentType.help for variants
-                                  contentType: ContentType.success,
-                                ),
+                                content: Text("Reset Password Successfully!"),
                               );
 
                               ScaffoldMessenger.of(context)
@@ -144,13 +138,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                 backgroundColor: Colors.transparent,
                                 duration: Duration(seconds: 5),
 
-                                content: AwesomeSnackbarContent(
-                                  title: 'Reset Password Failed ',
-                                  message: state.message,
-
-                                  /// change contentType to ContentType.success, ContentType.warning or ContentType.help for variants
-                                  contentType: ContentType.failure,
-                                ),
+                                content: Text("Reset Failed"),
                               );
 
                               ScaffoldMessenger.of(context)
@@ -164,7 +152,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                   PostApiStatus.loading) {
                                 return Center(
                                   child: CircularProgressIndicator(
-                                    color: DefaultColors.failureRed,
+                                    color: AppColors.bikerrRedFill,
                                   ),
                                 );
                               }

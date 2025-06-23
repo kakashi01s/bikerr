@@ -7,6 +7,7 @@ import 'package:bikerr/features/chat/domain/entitiy/chat_room_user_entity.dart';
 import 'package:bikerr/features/chat/presentation/bloc/chat_bloc.dart';
 import 'package:bikerr/services/session/session_manager.dart';
 import 'package:bikerr/utils/enums/enums.dart';
+import 'package:bikerr/utils/widgets/buttons/app_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/svg.dart';
@@ -135,8 +136,7 @@ class Chatroominfoscreen extends StatelessWidget {
               ), // Add a divider
               // Members List (takes remaining space)
               Expanded(
-                child:
-                    users == null || users.isEmpty
+                child: users == null || users.isEmpty
                         ? Center(child: Text("No members in this group."))
                         : ListView.separated(
                           // Use ListView.separated for built-in dividers
@@ -242,14 +242,20 @@ class GroupDetail extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      chatRoomModel!.name ?? "Group Name",
-                      style: textTheme.titleLarge,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Row(children: [
+                      Text(
+                        chatRoomModel!.name ?? "Group Name",
+                        style: textTheme.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      IconButton(onPressed: () {
+
+                      }, icon: Icon(Icons.logout))
+                    ],),
+                   
                     Text(
                       chatRoomModel!.city ?? "Group City",
-                      style: textTheme.titleMedium?.copyWith(
+                      style: textTheme.bodySmall?.copyWith(
                         color: AppColors.bikerrRedFill,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -279,7 +285,7 @@ class GroupDetail extends StatelessWidget {
             ),
             child: Text(
               chatRoomModel!.description ?? "No description provided.",
-              style: textTheme.bodyMedium?.copyWith(color: AppColors.whiteText),
+              style: textTheme.bodySmall?.copyWith(color: AppColors.whiteText),
             ),
           ),
         ],
@@ -324,7 +330,7 @@ class UserTile extends StatelessWidget {
           Expanded(
             child: Text(
               member.user.name ?? "Unknown User",
-              style: textTheme.titleMedium,
+              style: textTheme.labelSmall,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -341,9 +347,9 @@ class UserTile extends StatelessWidget {
               ),
               child: Text(
                 "OWNER",
-                style: textTheme.labelSmall?.copyWith(
+                style: textTheme.bodySmall?.copyWith(
                   color: AppColors.bikerrRedStroke,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.normal,
                 ),
               ),
             ),

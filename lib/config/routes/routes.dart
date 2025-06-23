@@ -12,6 +12,7 @@ import 'package:bikerr/features/chat/presentation/pages/base_chat_screen.dart';
 import 'package:bikerr/features/chat/presentation/pages/chat_screen.dart';
 import 'package:bikerr/features/conversations/presentation/bloc/conversation_bloc.dart';
 import 'package:bikerr/features/conversations/presentation/pages/conversation_screen.dart';
+import 'package:bikerr/features/conversations/presentation/pages/create_new_conversations.dart';
 import 'package:bikerr/features/conversations/presentation/pages/join_new_conversations.dart';
 import 'package:bikerr/features/map/presentation/pages/map_screen.dart';
 import 'package:bikerr/utils/di/service_locator.dart';
@@ -127,7 +128,13 @@ class Routes {
               );
             },
           );
+
         }
+
+      case RoutesName.createChatGroupsScreen:
+        return MaterialPageRoute(
+          builder: (context) => const CreateNewConversations(),
+        );
       default:
         return MaterialPageRoute(
           builder: (context) {
