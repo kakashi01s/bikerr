@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "764122838769",
+    "project_id": "bikerr-46c6f",
+    "storage_bucket": "bikerr-46c6f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:764122838769:android:429fe6cc18c2e772635b50",
+        "android_client_info": {
+          "package_name": "com.stardust.bikerr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQ7tu0veVzD1ohcSnqU0cw68GOQTOnVaY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
