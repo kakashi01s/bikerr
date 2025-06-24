@@ -1,63 +1,89 @@
-class Device extends Object {
-  int? id;
-  Map<String, dynamic>? attributes;
-  int? groupId;
-  String? name;
-  String? uniqueId;
-  String? status;
-  String? lastUpdate;
-  int? positionId;
-  String? phone;
-  String? model;
-  String? contact;
-  String? category;
-  bool? disabled;
-  String? photo;
+// model/Device.dart
+class Device {
+  final int? id;
+  final String? name;
+  final String? uniqueId;
+  final String? status;
+  final bool? disabled;
+  final int? lastPositionId;
+  final int? groupId;
+  final List<dynamic>? calendarsId;
+  final String? phone;
+  final String? model;
+  final String? contact;
+  final String? category;
+  final double? geofenceIds;
+  final String? manufacturer;
+  final String? plate;
+  final String? imei;
+  final dynamic attributes;
 
-  Device(
-      {id,
-      attributes,
-      name,
-      uniqueId,
-      status,
-      lastUpdate,
-      positionId,
-      phone,
-      model,
-      contact,
-      category,
-      disabled,
-      photo});
+  Device({
+    this.id,
+    this.name,
+    this.uniqueId,
+    this.status,
+    this.disabled,
+    this.lastPositionId,
+    this.groupId,
+    this.calendarsId,
+    this.phone,
+    this.model,
+    this.contact,
+    this.category,
+    this.geofenceIds,
+    this.manufacturer,
+    this.plate,
+    this.imei,
+    this.attributes,
+  });
 
-  Device.fromJson(Map<String, dynamic> json) {
-    id = json["id"];
-    attributes = json["attributes"];
-    name = json["name"];
-    uniqueId = json["uniqueId"];
-    status = json["status"];
-    lastUpdate = json["lastUpdate"];
-    positionId = json["positionId"];
-    phone = json["phone"];
-    model = json["model"];
-    contact = json["contact"];
-    category = json["category"];
-    disabled = json["disabled"];
-    photo = json["photo"];
+  factory Device.fromJson(Map<String, dynamic> json) {
+    return Device(
+      id: json['id'],
+      name: json['name'],
+      uniqueId: json['uniqueId'],
+      status: json['status'],
+      disabled: json['disabled'],
+      lastPositionId: json['lastPositionId'],
+      groupId: json['groupId'],
+      calendarsId: json['calendarsId'],
+      phone: json['phone'],
+      model: json['model'],
+      contact: json['contact'],
+      category: json['category'],
+      geofenceIds: json['geofenceIds'] is int ? json['geofenceIds'].toDouble() : json['geofenceIds'],
+      manufacturer: json['manufacturer'],
+      plate: json['plate'],
+      imei: json['imei'],
+      attributes: json['attributes'],
+    );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'attributes': attributes,
-        'name': name,
-        'uniqueId': uniqueId,
-        'status': status,
-        'lastUpdate': lastUpdate,
-        'positionId': positionId,
-        'phone': phone,
-        'model': model,
-        'contact': contact,
-        'category': category,
-        'disabled': disabled,
-        'photo': photo
-      };
+
+  static List<Device> fromList(List<dynamic> jsonList) {
+    return jsonList.map((json) => Device.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'uniqueId': uniqueId,
+      'status': status,
+      'disabled': disabled,
+      'lastPositionId': lastPositionId,
+      'groupId': groupId,
+      'calendarsId': calendarsId,
+      'phone': phone,
+      'model': model,
+      'contact': contact,
+      'category': category,
+      'geofenceIds': geofenceIds,
+      'manufacturer': manufacturer,
+      'plate': plate,
+      'imei': imei,
+      'attributes': attributes,
+    };
+  }
 }

@@ -30,7 +30,7 @@ class ConversationPageAppBar extends StatelessWidget {
                   child: Row(
                     children: [
                       BackButtonComponent(onTap: () {
-                        Navigator.pushNamedAndRemoveUntil(context, "base_page", (route) => false);
+                       Navigator.pop(context);
                       }),
                       SizedBox(width: 8),
                       Flexible(

@@ -8,6 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/svg.dart';
 
+import '../../../../utils/di/service_locator.dart';
+import '../../../map/presentation/bloc/map_bloc.dart';
+
 List<BottomNavigationBarItem> bottomNavItems = <BottomNavigationBarItem>[
   // BottomNavigationBarItem(
   //   icon: SvgPicture.asset(AppLogos.rental),
@@ -37,7 +40,10 @@ List<BottomNavigationBarItem> bottomNavItems = <BottomNavigationBarItem>[
 ];
 
 List<Widget> bottomNavScreen = <Widget>[
-  MapScreen(),
+  BlocProvider<MapBloc>(
+    create: (context) => sl<MapBloc>(),
+    child: MapScreen(),
+  ),
   HomeScreen(),
   ProfileScreen(),
 ];

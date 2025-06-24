@@ -1,34 +1,53 @@
-class Event extends Object {
-  int? id;
-  int? deviceId;
-  String? type;
-  String? serverTime;
-  String? eventTime;
-  int? positionId;
-  int? geofenceId;
-  int? maintenanceId;
-  Map<String, dynamic>? attributes;
+// model/Event.dart
+class Event {
+  final int? id;
+  final String? type;
+  final String? serverTime;
+  final int? deviceId;
+  final int? positionId;
+  final int? geofenceId;
+  final int? maintenanceId;
+  final dynamic attributes;
 
-  Event(
-      {id,
-      deviceId,
-      type,
-      serverTime,
-      eventTime,
-      positionId,
-      geofenceId,
-      maintenanceId,
-      attributes});
+  Event({
+    this.id,
+    this.type,
+    this.serverTime,
+    this.deviceId,
+    this.positionId,
+    this.geofenceId,
+    this.maintenanceId,
+    this.attributes,
+  });
 
-  Event.fromJson(Map<String, dynamic> json) {
-    id = json["id"];
-    deviceId = json["deviceId"];
-    type = json["type"];
-    serverTime = json["serverTime"];
-    eventTime = json["eventTime"];
-    positionId = json["positionId"];
-    geofenceId = json["geofenceId"];
-    maintenanceId = json["maintenanceId"];
-    attributes = json["attributes"];
+  factory Event.fromJson(Map<String, dynamic> json) {
+    return Event(
+      id: json['id'],
+      type: json['type'],
+      serverTime: json['serverTime'],
+      deviceId: json['deviceId'],
+      positionId: json['positionId'],
+      geofenceId: json['geofenceId'],
+      maintenanceId: json['maintenanceId'],
+      attributes: json['attributes'],
+    );
+  }
+
+  // Add the static fromList method
+  static List<Event> fromList(List<dynamic> jsonList) {
+    return jsonList.map((json) => Event.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type,
+      'serverTime': serverTime,
+      'deviceId': deviceId,
+      'positionId': positionId,
+      'geofenceId': geofenceId,
+      'maintenanceId': maintenanceId,
+      'attributes': attributes,
+    };
   }
 }

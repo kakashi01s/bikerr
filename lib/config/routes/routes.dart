@@ -14,6 +14,7 @@ import 'package:bikerr/features/conversations/presentation/bloc/conversation_blo
 import 'package:bikerr/features/conversations/presentation/pages/conversation_screen.dart';
 import 'package:bikerr/features/conversations/presentation/pages/create_new_conversations.dart';
 import 'package:bikerr/features/conversations/presentation/pages/join_new_conversations.dart';
+import 'package:bikerr/features/map/presentation/bloc/map_bloc.dart';
 import 'package:bikerr/features/map/presentation/pages/map_screen.dart';
 import 'package:bikerr/utils/di/service_locator.dart';
 import 'package:flutter/material.dart';
@@ -34,7 +35,11 @@ class Routes {
       case RoutesName.splashScreen:
         return MaterialPageRoute(builder: (context) => const SplashScreen());
       case RoutesName.mapScreen:
-        return MaterialPageRoute(builder: (context) => const MapScreen());
+        return MaterialPageRoute(builder: (context) {
+          return BlocProvider(
+            create: (context) => sl<MapBloc>(),
+            child: MapScreen(),);
+        });
       case RoutesName.registerScreen:
         return MaterialPageRoute(builder: (context) => const RegisterScreen());
       case RoutesName.joinChatScreen:

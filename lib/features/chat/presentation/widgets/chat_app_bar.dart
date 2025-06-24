@@ -93,11 +93,7 @@ class ChatAppBar
         leading: BackButtonComponent(
           onTap: () {
             // Assuming RoutesName and Navigator are correctly set up
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              RoutesName.conversationsScreen,
-              (predicate) => false,
-            );
+            Navigator.pop(context);
           },
         ),
         backgroundColor: AppColors.buttonbgColor, // Use your theme color

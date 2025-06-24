@@ -276,7 +276,8 @@ class NetworkServicesApi implements BaseApiServices {
               refreshToken, // Keep the same refresh token if not renewed by backend
           // jwtRefreshToken: newRefreshToken ?? refreshToken, // Use new refresh token if provided
           jwtAccessToken: newAccessToken,
-          traccarToken: SessionManager.instance.traccarToken
+          traccarToken: SessionManager.instance.traccarToken,
+          traccarCookie: SessionManager.instance.traccarCookie
         );
 
         print("[RefreshToken] Access token refreshed successfully");

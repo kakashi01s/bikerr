@@ -25,8 +25,11 @@ import 'package:bikerr/features/conversations/domain/usecases/fetch_all_user_con
 import 'package:bikerr/features/conversations/domain/usecases/get_all_chat_rooms_usecase.dart';
 import 'package:bikerr/features/conversations/domain/usecases/join_new_chat_group_use_case.dart';
 import 'package:bikerr/features/conversations/presentation/bloc/conversation_bloc.dart';
+import 'package:bikerr/features/map/data/datasource/traccar_remote_data_source.dart';
 import 'package:bikerr/features/map/data/repository/location_repository_impl.dart';
+import 'package:bikerr/features/map/data/repository/traccar_repository.impl.dart';
 import 'package:bikerr/features/map/domain/usecases/get_current_location_usecase.dart';
+import 'package:bikerr/features/map/domain/usecases/traccar_use_case.dart';
 import 'package:bikerr/features/map/presentation/bloc/map_bloc.dart';
 import 'package:bikerr/services/notifications/notification_service.dart';
 import 'package:bikerr/utils/network/network_api_services.dart';
@@ -61,7 +64,10 @@ Future<void> init() async {
   ); // Keep as is per user request
   sl.registerLazySingleton(
     () => ConversationRemoteDataSource(),
-  ); // Keep as is per user request
+  );
+  sl.registerLazySingleton(
+    () => TraccarRemoteDataSource(),
+  );
 
   // repositories
   // Keep dependencies on RemoteDataSources as in your original code
@@ -69,6 +75,7 @@ Future<void> init() async {
     () => AuthRepositoryImpl(authRemoteDataSource: sl()),
   );
   sl.registerLazySingleton(() => LocationRepositoryImpl());
+  sl.registerLazySingleton(() => TraccarRepositoryImpl(traccarRemoteDataSource: sl()));
   // ChatRepository depends on ChatDataSource (abstract)
   sl.registerLazySingleton(
     () => ChatRepositoryImpl(chatRemoteDataSource: sl()),
@@ -76,6 +83,7 @@ Future<void> init() async {
   sl.registerLazySingleton(
     () => ConversationRepositoryImpl(conversationRemoteDataSource: sl()),
   );
+
 
   //use cases
   // Keep dependencies on RepositoryImpl as in your original code
@@ -120,6 +128,7 @@ Future<void> init() async {
     () => GetAllChatRoomsUsecase(conversationRepositoryImpl: sl()),
   ); // Depends on ChatRepositoryImpl
   sl.registerLazySingleton(() => JoinNewChatGroupUseCase(conversationRepositoryImpl: sl()));
+  sl.registerLazySingleton(() => TraccarUseCase(traccarRepositoryImpl: sl()));
   // Blocs
   sl.registerFactory(
     () => AuthBloc(
@@ -130,7 +139,7 @@ Future<void> init() async {
       refreshTokenUsecase: sl(),
     ),
   );
-  sl.registerFactory(() => MapBloc(getCurrentLocationUsecase: sl()));
+  sl.registerFactory(() => MapBloc(getCurrentLocationUsecase: sl(), traccarUseCase: sl()));
   sl.registerFactory(
     () => ChatBloc(
       sl(),

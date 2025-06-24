@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../traccar_gennissi.dart'; // Assuming this is needed
+import 'package:traccar_gennissi/traccar_gennissi.dart';
 import 'model/Device.dart';
 import 'model/Event.dart';
 import 'model/GeofenceModel.dart';
@@ -14,624 +19,665 @@ import 'model/Summary.dart';
 import 'model/Trip.dart';
 
 class Traccar {
-  static Map<String, String> headers = {}; // Initialize headers map
-  static const String _headersKey = 'traccar_all_headers'; // Key for saving the entire headers map
-  static var _traccarId; // Internal static variable for traccarId
+  static Map<String, String> headers = {'Content-Type': 'application/json'};
+  static String? serverURL;
+  static String? socketURL;
+  static String? sessionCookie;
+  static WebSocket? _webSocket;
+  static final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static const String _sessionKey = 'JSESSIONID';
+  static final StreamController<dynamic> _webSocketController = StreamController<dynamic>.broadcast(); // New: StreamController
 
-  // Getter for traccarId to be accessed from outside
-  static int? get traccarId => _traccarId;
+  static Future<void> saveSessionCookie(String cookie) async {
+    sessionCookie = cookie;
+    await _secureStorage.write(key: _sessionKey, value: cookie);
+    headers['Cookie'] = sessionCookie!;
+    print("[Traccar] Session cookie saved: $cookie");
+  }
 
-
-  // Default Traccar server URL and socket URL
-  static String? serverURL = "http://13.60.88.192:8082";
-  static String? socketURL = "ws://13.60.88.192:8082/api/websocket";
-
-  // Method to set the Bearer Token and save the entire headers map and traccarId
-  static Future<void> setBearerToken(String token, int traccarId) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    if (token.isNotEmpty) {
-      headers["Authorization"] = "Bearer $token";
-      _traccarId = traccarId; // Set the static variable
-      // Save the entire headers map as a JSON string
-      await prefs.setString(_headersKey, json.encode(headers));
-      await prefs.setInt('traccarId', traccarId); // Save traccarId to local storage
-      print("Bearer token set and entire headers map saved locally by Traccar plugin: ${headers['Authorization']}");
-      print("Traccar ID saved locally: $traccarId");
+  static Future<void> loadSessionCookie() async {
+    sessionCookie = await _secureStorage.read(key: _sessionKey);
+    if (sessionCookie != null) {
+      headers['Cookie'] = sessionCookie!;
+      print("[Traccar] Session cookie loaded: $sessionCookie");
     } else {
-      print("Received empty token. Authorization header not set and headers not saved.");
-      headers.remove('Authorization'); // Clear token if invalid/empty
-      await prefs.remove(_headersKey); // Remove from local storage as well
-      await prefs.remove('traccarId'); // Also remove traccarId
-      _traccarId = null; // Clear the static variable
+      print("[Traccar] No session cookie found.");
     }
   }
 
-  // Method to load the entire headers map and traccarId from local storage
-  static Future<void> loadBearerToken() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final String? storedHeadersJson = prefs.getString(_headersKey);
-    if (storedHeadersJson != null && storedHeadersJson.isNotEmpty) {
-      try {
-        final Map<String, dynamic> decodedHeaders = json.decode(storedHeadersJson);
-        headers = decodedHeaders.map((key, value) => MapEntry(key, value.toString()));
-        _traccarId = prefs.getInt('traccarId'); // Load traccarId
-        print("Headers map loaded from local storage by Traccar plugin.");
-        print("Traccar ID loaded from local storage: $_traccarId");
-      } catch (e) {
-        print("Error decoding stored headers or traccarId: $e");
-        await prefs.remove(_headersKey); // Clear corrupted data
-        await prefs.remove('traccarId');
-        _traccarId = null; // Clear the static variable
+  static Future<void> clearSessionCookie() async {
+    sessionCookie = null;
+    await _secureStorage.delete(key: _sessionKey);
+    headers.remove('Cookie');
+    print("[Traccar] Session cookie cleared.");
+  }
+
+  static Future<bool> refreshSessionCookie(String token) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/session?token=$token'));
+      if (response.statusCode == 200) {
+        updateCookie(response);
+        return true;
       }
-    } else {
-      print("No headers map found in local storage for Traccar plugin.");
-      print("No Traccar ID found in local storage.");
+    } catch (e) {
+      print("Error refreshing session cookie: $e");
     }
+    return false;
   }
 
-  // Utility to initialize server and socket URLs
-  static Future<void> initializeTraccarUrls() async {
+  static Future<http.Response?> loginWithToken(String token) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
 
     if (prefs.containsKey('url')) {
       serverURL = prefs.get('url').toString();
       var uri = Uri.parse(serverURL!);
-
-      String socketScheme;
-      if (uri.scheme == "http") {
-        socketScheme = "ws://";
-      } else {
-        socketScheme = "wss://";
-      }
-
-      if (uri.hasPort) {
-        socketURL =
-            socketScheme + uri.host + ":" + uri.port.toString() + "/api/socket";
-      } else {
-        socketURL = socketScheme + uri.host + "/api/socket";
-      }
+      String socketScheme = uri.scheme == "http" ? "ws://" : "wss://";
+      socketURL = uri.hasPort
+          ? "$socketScheme${uri.host}:${uri.port}/api/socket"
+          : "$socketScheme${uri.host}/api/socket";
     } else {
-      serverURL = "http://demo.traccar.org"; // Default if not configured
-    }
-    print("Traccar Server URL: $serverURL");
-    print("Traccar Socket URL: $socketURL");
-  }
-
-  // Session logout: Clears the headers map and removes it from local storage
-  static Future<void> sessionLogout() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    headers.clear(); // Clear all headers
-    _traccarId = null; // Clear the static variable
-    await prefs.remove(_headersKey); // Remove the stored headers map
-    await prefs.remove('traccarId'); // Remove traccarId from local storage
-    print("Session logout: Headers and Traccar ID cleared locally by Traccar plugin.");
-  }
-
-
-  // --- All other API calls are updated to use 'headers' (which now contains 'Authorization') ---
-  // Ensuring all references to 'cookie' are replaced with 'Authorization'
-
-  static Future<List<Device>?> getDevices() async {
-    await loadBearerToken(); // Load headers before the call
-    print("[Traccar.dart] Running Get devices");
-    print("[Traccar.dart] Headers ${headers}");
-    print("[Traccar.dart] User Id ${_traccarId}");
-    Map<String, String> queryParams = {};
-
-    // Only add userId if _traccarId is available
-    if (_traccarId != null) {
-      queryParams['userId'] = _traccarId.toString();
+      serverURL = "http://demo.traccar.org";
     }
 
-    final uri = Uri.http(
-      Uri.parse(serverURL!).authority, // Extracts the host and port
-      '/api/devices', // Path
-      queryParams, // Pass the query parameters map
-    );
+    final uri = Uri.parse("$serverURL/api/session?token=$token");
+    final response = await http.get(uri);
 
-    final response = await http.get(
-      uri, // Use the constructed Uri object
-      headers: headers, // Uses the static 'headers' map
-    );
-
-    print("Get devices = ${response.body}");
     if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      print("Get devices = ${list}");
-      return list.map((model) => Device.fromJson(model)).toList();
+      final rawCookie = response.headers['set-cookie'];
+      if (rawCookie != null) {
+        final cookie = rawCookie.split(';').firstWhere(
+              (c) => c.trim().startsWith('JSESSIONID'),
+          orElse: () => '',
+        ).trim();
+        await saveSessionCookie(cookie);
+      }
+      return response;
     } else {
-      print("Get devices = ${response.statusCode}");
+      print("Login failed with status: ${response.statusCode}");
       return null;
     }
   }
 
-  static Future<List<PositionModel>?> getPositionById(
-      String deviceId, String posId) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! +
-            "/api/positions?deviceId=" +
-            deviceId +
-            "&id=" +
-            posId),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => PositionModel.fromJson(model)).toList();
-    } else {
-      print("Get devices = ${response.statusCode}");
-      return null;
-    }
-  }
+  static Future<bool> login(String purchaseCode, email, password) async {
+    final prefs = await SharedPreferences.getInstance();
+    serverURL = prefs.getString('url') ?? 'http://13.60.88.192:8082'; // Use local IP for now as it was in previous traccar.dart
+    socketURL = prefs.getString('socketUrl') ?? 'ws://13.60.88.192:8082/api/socket';
 
-  static Future<List<PositionModel>?> getPositions(
-      String deviceId, String from, String to) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! +
-            "/api/positions?deviceId=" +
-            deviceId +
-            "&from=" +
-            from +
-            "&to=" +
-            to),
-        headers: headers); // Uses the static 'headers' map
+    final response = await http.post(
+      Uri.parse('$serverURL/api/session'),
+      headers: headers,
+      body: json.encode({'email': email, 'password': password}),
+    );
     if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => PositionModel.fromJson(model)).toList();
+      updateCookie(response);
+      await prefs.setString('email', email);
+      await prefs.setString('password', password);
+      return true;
     } else {
       print(response.statusCode);
+      return false;
+    }
+  }
+
+  static void updateCookie(http.Response response) {
+    String? rawCookie = response.headers['set-cookie'];
+    if (rawCookie != null) {
+      int index = rawCookie.indexOf(';');
+      if (index == -1) {
+        saveSessionCookie(rawCookie);
+      } else {
+        saveSessionCookie(rawCookie.substring(0, index));
+      }
+    }
+  }
+
+  static Future<bool> sessionLogout() async {
+    try {
+      final response = await http.delete(Uri.parse('$serverURL/api/session'), headers: headers);
+      if (response.statusCode == 204) {
+        await clearSessionCookie();
+        disconnectWebSocket(); // Disconnect WebSocket on logout
+        return true;
+      } else {
+        print("Logout failed: ${response.statusCode}");
+        return false;
+      }
+    } catch (e) {
+      print("Error during logout: $e");
+      return false;
+    }
+  }
+
+  // Modified: connectWebSocket now returns a Stream
+  static Stream<dynamic>? connectWebSocket() {
+    if (socketURL == null || sessionCookie == null) {
+      print("WebSocket connection failed: socketURL or sessionCookie is null.");
+      return null;
+    }
+    try {
+      // Corrected: WebSocket.connect returns a Future<WebSocket>.
+      // We call .then() on this Future to handle the connected WebSocket.
+      WebSocket.connect(socketURL!, headers: {'Cookie': sessionCookie!}).then((ws) {
+        _webSocket = ws; // Assign the connected WebSocket to _webSocket
+        print("[Traccar] WebSocket Connected to $socketURL");
+        _webSocket?.listen( // Use _webSocket for listening now
+              (data) {
+            // Process the incoming data and add it to the stream controller
+            print("[Traccar] WebSocket Data received: $data");
+            final Map<String, dynamic> decodedData = json.decode(data);
+            if (decodedData.containsKey('devices')) {
+              _webSocketController.add(Device.fromList(decodedData['devices']));
+            } else if (decodedData.containsKey('positions')) {
+              _webSocketController.add(PositionModel.fromList(decodedData['positions']));
+            } else if (decodedData.containsKey('events')) {
+              _webSocketController.add(Event.fromList(decodedData['events']));
+            } else {
+              _webSocketController.add(data); // Fallback for other data types
+            }
+          },
+          onError: (error) {
+            print("[Traccar] WebSocket Error: $error");
+            _webSocketController.addError(error);
+          },
+          onDone: () {
+            print("[Traccar] WebSocket Disconnected.");
+            _webSocketController.close(); // Close the controller when WebSocket is done
+            _webSocket = null;
+          },
+        );
+      }).catchError((e) {
+        print("[Traccar] WebSocket connection error: $e");
+        _webSocketController.addError(e);
+      });
+      return _webSocketController.stream; // Return the stream from the controller
+    } catch (e) {
+      print("[Traccar] Error connecting WebSocket: $e");
+      _webSocketController.addError(e);
+      return null;
+    }
+  }
+
+  static void disconnectWebSocket() {
+    _webSocket?.close();
+    _webSocket = null;
+    if (!_webSocketController.isClosed) { // Ensure controller is not already closed
+      _webSocketController.close();
+    }
+    print("[Traccar] WebSocket manually disconnected.");
+  }
+
+  static Future<List<Device>?> getDevices() async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/devices'), headers: headers);
+      if (response.statusCode == 200) {
+        return Device.fromList(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting devices: $e");
+      return null;
+    }
+  }
+
+  static Future<PositionModel?> getPositionById(String deviceId, String posId) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/positions/$posId'), headers: headers);
+      if (response.statusCode == 200) {
+        return PositionModel.fromJson(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting position by ID: $e");
+      return null;
+    }
+  }
+
+  static Future<List<PositionModel>?> getPositions(String deviceId, String from, String to) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/reports/positions?deviceId=$deviceId&from=$from&to=$to'), headers: headers);
+      if (response.statusCode == 200) {
+        return PositionModel.fromList(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting positions: $e");
       return null;
     }
   }
 
   static Future<List<PositionModel>?> getLatestPositions() async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(Uri.parse(serverURL! + "/api/positions"),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => PositionModel.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/positions'), headers: headers);
+      if (response.statusCode == 200) {
+        return PositionModel.fromList(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting latest positions: $e");
       return null;
     }
   }
 
-  static Future<List<Device>?> getDevicesById(String id) async {
-    await loadBearerToken(); // Load headers before the call
-    final response = await http
-        .get(Uri.parse(serverURL! + "/api/devices?id=" + id), headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => Device.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<Device?> getDevicesById(String id) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/devices/$id'), headers: headers);
+      if (response.statusCode == 200) {
+        return Device.fromJson(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting device by ID: $e");
       return null;
     }
   }
 
-  static Future<http.Response> getSendCommands(String id) async {
-    await loadBearerToken(); // Load headers before the call
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/commands/types?deviceId=" + id),
-        headers: headers); // Uses the static 'headers' map
-    return response;
+  static Future<List<String>?> getSendCommands(String id) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/commands/types?deviceId=$id'), headers: headers);
+      if (response.statusCode == 200) {
+        return List<String>.from(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting send commands: $e");
+      return null;
+    }
   }
 
-  static Future<http.Response> sendCommands(String command) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json"; // Ensure correct content type
-    final response = await http.post(
-        Uri.parse(serverURL! + "/api/commands/send"),
-        body: command,
-        headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<http.Response> updateUser(String user, String id) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.put(Uri.parse(serverURL! + "/api/users/" + id),
-        body: user, headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<List<RouteReport>?> getRoute(
-      String deviceId, String from, String to) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! +
-            "/api/reports/route?deviceId=" +
-            deviceId +
-            "&from=" +
-            from +
-            "&to=" +
-            to),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => RouteReport.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<List<RouteReport>?> getRoute(String deviceId, String from, String to) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/reports/route?deviceId=$deviceId&from=$from&to=$to'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => RouteReport.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting route: $e");
       return null;
     }
   }
 
   static Future<List<NotificationTypeModel>?> getNotificationTypes() async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/notifications/types"),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list
-          .map((model) => NotificationTypeModel.fromJson(model))
-          .toList();
-    } else {
-      print(response.statusCode);
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/notifications/types'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => NotificationTypeModel.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting notification types: $e");
       return null;
     }
   }
 
-  static Future<List<Event>?> getEvents(
-      String deviceId, String from, String to) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! +
-            "/api/reports/events?deviceId=" +
-            deviceId +
-            "&from=" +
-            from +
-            "&to=" +
-            to),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => Event.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<List<Event>?> getEvents(String deviceId, String from, String to) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/reports/events?deviceId=$deviceId&from=$from&to=$to'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => Event.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting events: $e");
       return null;
     }
   }
 
   static Future<Event?> getEventById(String id) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(Uri.parse(serverURL! + "/api/events/" + id),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      return Event.fromJson(json.decode(response.body));
-    } else {
-      print(response.statusCode);
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/events/$id'), headers: headers);
+      if (response.statusCode == 200) {
+        return Event.fromJson(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting event by ID: $e");
       return null;
     }
   }
 
-  static Future<List<Event>?> getAllDeviceEvents(
-      var deviceId, String from, String to) async {
-    await loadBearerToken(); // Load headers before the call
-    var uri =
-    Uri(queryParameters: {'deviceId': deviceId.toString(), 'from': from, 'to': to}); // Ensure deviceId is string
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/reports/events" + uri.toString()),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => Event.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<List<Event>?> getAllDeviceEvents(var deviceId, String from, String to) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/events?deviceId=$deviceId&from=$from&to=$to'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => Event.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting all device events: $e");
       return null;
     }
   }
 
-  static Future<List<Trip>?> getTrip(
-      String deviceId, String from, String to) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! +
-            "/api/reports/trips?deviceId=" +
-            deviceId +
-            "&from=" +
-            from +
-            "&to=" +
-            to),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => Trip.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<List<Trip>?> getTrip(String deviceId, String from, String to) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/reports/trips?deviceId=$deviceId&from=$from&to=$to'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => Trip.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting trip: $e");
       return null;
     }
   }
 
-  static Future<List<Stop>?> getStops(
-      String deviceId, String from, String to) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! +
-            "/api/reports/stops?deviceId=" +
-            deviceId +
-            "&from=" +
-            from +
-            "&to=" +
-            to),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => Stop.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<List<Stop>?> getStops(String deviceId, String from, String to) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/reports/stops?deviceId=$deviceId&from=$from&to=$to'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => Stop.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting stops: $e");
       return null;
     }
   }
 
-  static Future<List<Summary>?> getSummary(
-      String deviceId, String from, String to) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! +
-            "/api/reports/summary?deviceId=" +
-            deviceId +
-            "&from=" +
-            from +
-            "&to=" +
-            to),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => Summary.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<Summary?> getSummary(String deviceId, String from, String to) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/reports/summary?deviceId=$deviceId&from=$from&to=$to'), headers: headers);
+      if (response.statusCode == 200) {
+        return Summary.fromJson(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting summary: $e");
       return null;
     }
   }
 
-  static Future<List<GeofenceModel>?> getGeoFencesByUserID(
-      String userID) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/geofences?userId=" + userID),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => GeofenceModel.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<List<GeofenceModel>?> getGeoFencesByUserID(String userID) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/geofences?userId=$userID'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => GeofenceModel.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting geofences by user ID: $e");
       return null;
     }
   }
 
-  static Future<List<GeofenceModel>?> getGeoFencesByDeviceID(
-      String deviceId) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/geofences?deviceId=" + deviceId),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => GeofenceModel.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+  static Future<List<GeofenceModel>?> getGeoFencesByDeviceID(String deviceId) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/geofences?deviceId=$deviceId'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => GeofenceModel.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting geofences by device ID: $e");
       return null;
     }
   }
 
-  static Future<http.Response> addGeofence(String fence) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.post(Uri.parse(serverURL! + "/api/geofences"),
-        body: fence, headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<http.Response> addDevice(String device) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.post(Uri.parse(serverURL! + "/api/devices"),
-        body: device, headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<http.Response> updateGeofence(String fence, String id) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.put(
-        Uri.parse(serverURL! + "/api/geofences/" + id),
-        body: fence,
-        headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<http.Response> updateDevices(String fence, String id) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.put(
-        Uri.parse(serverURL! + "/api/devices/" + id),
-        body: fence,
-        headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<http.Response> addPermission(String permission) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.post(Uri.parse(serverURL! + "/api/permissions"),
-        body: permission, headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<StreamedResponse> deletePermission(dynamic deviceId, dynamic geofenceId) async { // Corrected argument name
-    await loadBearerToken(); // Load headers before the call
-    http.Request rq =
-    http.Request('DELETE', Uri.parse(serverURL! + "/api/permissions"));
-    rq.headers.addAll(<String, String>{
-      "Accept": "application/json",
-      "Content-type": "application/json; charset=utf-8",
-      "Authorization": headers['Authorization'].toString() // Use Authorization header
-    });
-    rq.body = jsonEncode({"deviceId": deviceId, "geofenceId": geofenceId}); // Corrected key for consistency
-
-    return http.Client().send(rq);
-  }
-
-  static Future<http.Response> deleteGeofence(dynamic id) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http
-        .delete(Uri.parse(serverURL! + "/api/geofences/$id"), headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<http.Response?> geocode(String lat, String lng) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(
-            serverURL! + "/api/server/geocode?latitude=$lat&longitude=$lng"),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      return response;
-    } else {
-      print(response.statusCode);
+  static Future<String?> geocode(String lat, String lng) async {
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/geocode?latitude=$lat&longitude=$lng'), headers: headers);
+      if (response.statusCode == 200) {
+        return response.body; // Assuming the body is the geocoded address directly
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error during geocoding: $e");
       return null;
     }
   }
-
 
   static Future<List<NotificationModel>?> getNotifications() async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/notifications"),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list
-          .map((model) => NotificationModel.fromJson(model))
-          .toList();
-    } else {
-      print(response.statusCode);
+    try {
+      final response = await http.get(Uri.parse('$serverURL/api/notifications'), headers: headers);
+      if (response.statusCode == 200) {
+        Iterable list = json.decode(response.body);
+        return list.map((model) => NotificationModel.fromJson(model)).toList();
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error getting notifications: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> sendCommands(String command) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$serverURL/api/commands'),
+        headers: headers,
+        body: command,
+      );
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error sending command: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> updateUser(String user, String id) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$serverURL/api/users/$id'),
+        headers: headers,
+        body: user,
+      );
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error updating user: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> addGeofence(String fence) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$serverURL/api/geofences'),
+        headers: headers,
+        body: fence,
+      );
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error adding geofence: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> addDevice(String device) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$serverURL/api/devices'),
+        headers: headers,
+        body: device,
+      );
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error adding device: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> updateGeofence(String fence, String id) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$serverURL/api/geofences/$id'),
+        headers: headers,
+        body: fence,
+      );
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error updating geofence: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> updateDevices(String device, String id) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$serverURL/api/devices/$id'),
+        headers: headers,
+        body: device,
+      );
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error updating devices: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> addPermission(String permission) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$serverURL/api/permissions'),
+        headers: headers,
+        body: permission,
+      );
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error adding permission: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> deletePermission(dynamic deviceId, dynamic fenceId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$serverURL/api/permissions?deviceId=$deviceId&geofenceId=$fenceId'),
+        headers: headers,
+      );
+      if (response.statusCode == 204) {
+        return "Permission deleted successfully";
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error deleting permission: $e");
+      return null;
+    }
+  }
+
+  static Future<String?> deleteGeofence(dynamic id) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$serverURL/api/geofences/$id'),
+        headers: headers,
+      );
+      if (response.statusCode == 204) {
+        return "Geofence deleted successfully";
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error deleting geofence: $e");
       return null;
     }
   }
 
   static Future<NotificationModel?> addNotifications(String notification) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['Accept'] = "application/json"; // Add Accept header if necessary
-    final response = await http.post(
+    try {
+      final response = await http.post(
         Uri.parse(serverURL! + "/api/notifications"),
         body: notification,
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      return NotificationModel.fromJson(json.decode(response.body));
-    } else {
-      print(response.statusCode);
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        return NotificationModel.fromJson(json.decode(response.body));
+      } else {
+        print(response.statusCode);
+        return null;
+      }
+    } catch (e) {
+      print("Error adding notification: $e");
       return null;
     }
   }
 
   static Future<http.Response> deleteNotifications(String id) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http
-        .delete(Uri.parse(serverURL! + "/api/notifications/$id"), headers: headers); // Uses the static 'headers' map
+    final response = await http.delete(
+      Uri.parse('$serverURL/api/notifications/$id'),
+      headers: headers,
+    );
     return response;
-  }
-
-  static Future<List<CommandModel>?> getSavedCommands(id) async {
-    await loadBearerToken(); // Load headers before the call
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/commands/send?deviceId=" + id.toString()),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => CommandModel.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
-      return null;
-    }
-  }
-
-  static Future<List<MaintenanceModel>?> getMaintenance() async {
-    await loadBearerToken(); // Load headers before the call
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/maintenance"),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => MaintenanceModel.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
-      return null;
-    }
-  }
-
-  static Future<List<MaintenanceModel>?> getMaintenanceByDeviceId(String id) async {
-    await loadBearerToken(); // Load headers before the call
-    final response = await http.get(
-        Uri.parse(serverURL! + "/api/maintenance?deviceId=" + id.toString()),
-        headers: headers); // Uses the static 'headers' map
-    if (response.statusCode == 200) {
-      print(response.body);
-      Iterable list = json.decode(response.body);
-      return list.map((model) => MaintenanceModel.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
-      return null;
-    }
-  }
-
-  static Future<http.Response> deleteMaintenance(dynamic id) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http
-        .delete(Uri.parse(serverURL! + "/api/maintenance/$id"), headers: headers); // Uses the static 'headers' map
-    return response;
-  }
-
-  static Future<http.Response> addMaintenance(String m) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.post(Uri.parse(serverURL! + "/api/maintenance"),
-        body: m, headers: headers); // Uses the static 'headers' map
-    print(response.body);
-    return response;
-  }
-
-  static Future<http.Response> updateMaintenance(String m) async {
-    await loadBearerToken(); // Load headers before the call
-    headers['content-type'] = "application/json; charset=utf-8"; // Ensure correct content type
-    final response = await http.post(Uri.parse(serverURL! + "/api/maintenance"),
-        body: m, headers: headers); // Uses the static 'headers' map
-    print(response.body);
-    return response;
-  }
-
-  static Future<StreamedResponse> deleteMaintenancePermission(deviceId, maintenanceId) async { // Corrected argument name
-    await loadBearerToken(); // Load headers before the call
-    http.Request rq =
-    http.Request('DELETE', Uri.parse(serverURL! + "/api/permissions"));
-    rq.headers.addAll(<String, String>{
-      "Accept": "application/json",
-      "Content-type": "application/json; charset=utf-8",
-      "Authorization": headers['Authorization'].toString() // Use Authorization header
-    });
-    rq.body = jsonEncode({"deviceId": deviceId, "maintenanceId": maintenanceId});
-
-    return http.Client().send(rq);
   }
 }

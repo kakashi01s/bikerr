@@ -15,6 +15,7 @@ class SessionManager {
   String? jwtRefreshToken;
   String? jwtAccessToken;
   String? traccarToken;
+  String? traccarCookie;
   // Removed expiryDate related code
   // ------------------------------------------
 
@@ -25,6 +26,7 @@ class SessionManager {
     required String? jwtRefreshToken,
     required String? jwtAccessToken,
     required String? traccarToken,
+    required String? traccarCookie,
     // -----------------------------
   }) async {
     // Assign to properties
@@ -33,6 +35,7 @@ class SessionManager {
     this.jwtRefreshToken = jwtRefreshToken;
     this.jwtAccessToken = jwtAccessToken;
     this.traccarToken = traccarToken;
+    this.traccarCookie = traccarCookie;
 
     // Write to storage (storage.write handles null by deleting the key)
     await Future.wait([
@@ -42,6 +45,7 @@ class SessionManager {
       storage.write(key: "jwtRefreshToken", value: jwtRefreshToken),
       storage.write(key: "jwtAccessToken", value: jwtAccessToken),
       storage.write(key: "traccarToken", value: traccarToken),
+      storage.write(key: "traccarCookie", value: traccarCookie),
     ]);
   }
 
@@ -53,6 +57,7 @@ class SessionManager {
       storage.read(key: 'jwtRefreshToken'),
       storage.read(key: 'jwtAccessToken'),
       storage.read(key: 'traccarToken'),
+      storage.read(key: 'traccarCookie'),
 
     ]);
 
@@ -63,6 +68,7 @@ class SessionManager {
     jwtRefreshToken = response[2];
     jwtAccessToken = response[3];
     traccarToken = response[4];
+    traccarCookie = response[5];
   }
 
   Future<void> clearSession() async {
@@ -72,6 +78,7 @@ class SessionManager {
     jwtRefreshToken = null;
     jwtAccessToken = null;
     traccarToken = null;
+    traccarCookie = null;
 
     // Delete keys from storage
     await Future.wait([
@@ -80,6 +87,7 @@ class SessionManager {
       storage.delete(key: 'jwtRefreshToken'),
       storage.delete(key: 'jwtAccessToken'),
       storage.delete(key: 'traccarToken'),
+      storage.delete(key: 'traccarCookie'),
 
     ]);
   }
