@@ -60,6 +60,7 @@ class AppLogos {
   static const String post = 'assets/images/logo_post.svg';
   static const String joinGroup = 'assets/images/logo_join_group.svg';
   static const String search = 'assets/images/logo_search.svg';
+  static const String navigation_marker = 'assets/images/logo_navigation_marker.svg';
 }
 
 class AppText {

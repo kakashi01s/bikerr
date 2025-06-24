@@ -5,11 +5,12 @@ import 'package:bikerr/services/session/session_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
-class CustomAppBar extends StatelessWidget {
+class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   const CustomAppBar({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // No Expanded needed here, as PreferredSize will handle the sizing
     return Container(
       color: AppColors.bikerrbgColor,
       padding: const EdgeInsets.all(10.0),
@@ -29,15 +30,20 @@ class CustomAppBar extends StatelessWidget {
             child: SvgPicture.asset(AppLogos.profile, height: 50),
             onTap: () async {
               await SessionManager.instance.clearSession();
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                RoutesName.loginScreen,
-                (route) => false,
-              );
+              if (context.mounted) { // Check if the widget is still mounted before navigation
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  RoutesName.loginScreen,
+                      (route) => false,
+                );
+              }
             },
           ),
         ],
       ),
     );
   }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight); // Standard app bar height
 }
