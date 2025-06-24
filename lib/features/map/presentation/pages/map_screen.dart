@@ -1,20 +1,23 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:bikerr/config/constants.dart';
 import 'package:bikerr/config/routes/route_names.dart';
 import 'package:bikerr/core/theme.dart';
-import 'package:bikerr/features/map/domain/usecases/get_current_location_usecase.dart';
 import 'package:bikerr/features/map/presentation/bloc/map_bloc.dart';
 import 'package:bikerr/features/map/presentation/widgets/action_bar.dart';
 import 'package:bikerr/features/map/presentation/widgets/app_bar.dart';
-import 'package:bikerr/services/session/session_manager.dart';
-import 'package:bikerr/utils/di/service_locator.dart';
-import 'package:bikerr/utils/enums/enums.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:traccar_flutter/traccar_flutter.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
+import 'package:traccar_gennissi/traccar_gennissi.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../../utils/di/service_locator.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -24,230 +27,279 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  final _traccarFlutterPlugin = TraccarFlutter();
-  final Completer<GoogleMapController> _controller = Completer();
-  final SessionManager sessionManager = SessionManager.instance;
+  final MapBloc _mapBloc = MapBloc(getCurrentLocationUsecase: sl());
+  final MapController _mapController = MapController();
 
-  late final MapBloc _mapBloc;
-  Set<Marker> _markers = {};
-  LatLng? _lastPosition;
-  BitmapDescriptor? _customIcon;
-  bool isServiceStarted = false;
-  String? traccingMessage;
+  LatLng _currentMapCenter = const LatLng(24.5854, 73.7125); // Udaipur
+  String _locationText = "Fetching location...";
+
+  StreamSubscription<Position>? _positionStreamSubscription;
+
+  // --- New: Dropdown related state ---
+  final List<String> _traccarDevices = ['This Device', 'Bike Alpha', 'Car Beta', 'Truck Gamma'];
+  String? _selectedTraccarDevice;
 
   @override
   void initState() {
     super.initState();
-    _mapBloc = MapBloc(
-      getCurrentLocationUsecase: sl<GetCurrentLocationUsecase>(),
-    );
-    _initialize();
+    _selectedTraccarDevice = _traccarDevices[0]; // Initialize with "This Device"
+    _checkAndGetLocation();
+    Traccar.getDevices();
   }
 
-  Future<void> _initialize() async {
-    await _loadCustomMarker();
-    // await _initTraccar();
-    await _handleLocationPermission();
-  }
+  Future<void> _checkAndGetLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
 
-  Future<void> _loadCustomMarker() async {
-    _customIcon = await BitmapDescriptor.asset(
-      const ImageConfiguration(size: Size(48, 48)),
-      AppLogos.mapMarker,
-    );
-  }
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location services are disabled. Please enable them.')),
+        );
+      }
+      return;
+    }
 
-  // Future<void> _initTraccar() async {
-  //   traccingMessage = await _traccarFlutterPlugin.initTraccar();
-  //   traccingMessage = await _traccarFlutterPlugin.setConfigs(
-  //     TraccarConfigs(
-  //       interval: 10000,
-  //       distance: 10,
-  //       deviceId: '1241',
-  //       serverUrl: 'http://13.60.88.192:8082',
-  //       notificationIcon: 'ic_notification',
-  //       wakelock: true,
-  //     ),
-  //   );
-  //   setState(() {});
-  // }
-
-  Future<void> _handleLocationPermission() async {
-    final permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse) {
-      await _getLastAndStartLocation();
-    } else {
-      final requested = await Geolocator.requestPermission();
-      if (requested == LocationPermission.always ||
-          requested == LocationPermission.whileInUse) {
-        await _getLastAndStartLocation();
-      } else {
-        _showSnackBar("Location permission not granted.");
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permissions are denied. Map may not show your location.')),
+          );
+        }
+        return;
       }
     }
-  }
 
-  Future<void> _getLastAndStartLocation() async {
-    final lastPosition = await Geolocator.getLastKnownPosition(
-      forceAndroidLocationManager: true,
-    );
-    if (lastPosition != null) _updateLocation(lastPosition);
-    _mapBloc.add(GetInitialLocation());
-  }
-
-  Future<void> _updateLocation(Position position) async {
-    final newLatLng = LatLng(position.latitude, position.longitude);
-    _lastPosition = newLatLng;
-
-    setState(() {
-      _markers = {
-        Marker(
-          markerId: const MarkerId('user_location'),
-          position: newLatLng,
-          icon:
-              _customIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueMagenta,
-              ),
-        ),
-      };
-    });
-
-    if (_controller.isCompleted) {
-      final controller = await _controller.future;
-      controller.animateCamera(CameraUpdate.newLatLng(newLatLng));
+    if (permission == LocationPermission.deniedForever) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location permissions are permanently denied. Please enable them from app settings.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+      return;
     }
+
+    Position initialPosition = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    _updateLocation(initialPosition);
+
+    _startLocationStream();
   }
 
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+  void _startLocationStream() {
+    const LocationSettings locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 0,
+    );
+
+    _positionStreamSubscription = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen(
+          (Position position) {
+        _updateLocation(position);
+      },
+      onError: (e) {
+        print("Location stream error: $e");
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error getting location updates: $e')),
+          );
+        }
+      },
+      onDone: () {
+        print("Location stream done.");
+      },
+      cancelOnError: true,
+    );
+  }
+
+  void _updateLocation(Position position) {
+    if (mounted) {
+      setState(() {
+        _currentMapCenter = LatLng(position.latitude, position.longitude);
+        _locationText = 'Lat: ${position.latitude.toStringAsFixed(6)}, Lon: ${position.longitude.toStringAsFixed(6)}';
+        print('Current Location: Latitude: ${position.latitude}, Longitude: ${position.longitude}');
+      });
+    }
   }
 
   @override
   void dispose() {
-    _mapBloc.add(StopLocationTracking());
+    _positionStreamSubscription?.cancel();
+    _mapBloc.close();
+    _mapController.dispose();
     super.dispose();
-  }
-
-  Future<void> _toggleService() async {
-    try {
-      final result =
-          isServiceStarted
-              ? await _traccarFlutterPlugin.stopService()
-              : await _traccarFlutterPlugin.startService();
-
-      setState(() {
-        traccingMessage = result;
-        isServiceStarted = !isServiceStarted;
-      });
-    } catch (e) {
-      setState(() {
-        traccingMessage = e.toString();
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        floatingActionButton: Padding(
-          padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
+    return BlocProvider<MapBloc>.value(
+      value: _mapBloc,
+      child: SafeArea(
+        child: Scaffold(
+          backgroundColor: AppColors.bikerrbgColor,
+          appBar: const CustomAppBar(),
+          body: Column(
             children: [
-              FloatingActionButton(
-                heroTag: "btn1",
-                backgroundColor: Colors.white,
-                onPressed: () {
-                  // _toggleService();
+              ActionBar(
+                onMessageTap: () {
+                  Navigator.pushNamed(context, RoutesName.conversationsScreen);
                 },
-                child: Icon(isServiceStarted ? Icons.stop : Icons.play_arrow),
+              ),
+              Expanded(
+                child: _buildMapContent(),
               ),
             ],
           ),
-        ),
-        body: BlocProvider.value(
-          value: _mapBloc,
-          child: BlocListener<MapBloc, MapState>(
-            listener: (context, state) {
-              if (state.position != null) _updateLocation(state.position!);
-
-              switch (state.postApiStatus) {
-                case PostApiStatus.error:
-                  _showSnackBar("Error: ${state.errorMessage}");
-                  break;
-                case PostApiStatus.locationServiceDisabled:
-                  _showSnackBar("Location services are disabled.");
-                  break;
-                case PostApiStatus.permissionDenied:
-                  _showSnackBar("Location permission denied.");
-                  break;
-                case PostApiStatus.permissionDeniedForever:
-                  _showSnackBar("Location permission denied permanently.");
-                  break;
-                default:
-                  break;
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              if (mounted) {
+                _mapController.move(_currentMapCenter, 15.0);
               }
             },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const CustomAppBar(),
-                ActionBar(
-                  onMessageTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      RoutesName.conversationsScreen,
-                    );
-                  },
-                ),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      // GoogleMap(
-                      //   mapType: MapType.normal,
-                      //   initialCameraPosition: CameraPosition(
-                      //     target:
-                      //         _lastPosition ?? const LatLng(20.5937, 78.9629),
-                      //     zoom: 20,
-                      //     tilt: 30.0,
-                      //   ),
-                      //   zoomControlsEnabled: false,
-                      //   compassEnabled: false,
-                      //   buildingsEnabled: false,
-                      //   myLocationEnabled: false,
-                      //   myLocationButtonEnabled: false,
-
-                      //   onMapCreated: (controller) {
-                      //     if (!_controller.isCompleted)
-                      //       _controller.complete(controller);
-                      //   },
-                      //   markers: _markers,
-                      // ),
-                      BlocBuilder<MapBloc, MapState>(
-                        builder: (context, state) {
-                          return state.postApiStatus == PostApiStatus.loading
-                              ? const Center(
-                                child: CircularProgressIndicator(
-                                  color: AppColors.bikerrRedFill,
-                                ),
-                              )
-                              : const SizedBox.shrink();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            child: const Icon(Icons.my_location),
           ),
         ),
       ),
+    );
+  }
+
+  // Updated _buildTraccarDropDown to be a functional dropdown
+  Widget _buildTraccarDropDown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      decoration: BoxDecoration(
+        color: AppColors.markerBg1.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      width: MediaQuery.of(context).size.width * 0.45,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // BlocBuilder for dropdown if items come from Bloc, otherwise setState is fine
+          // For now, we'll use setState and assume items are local or fetched once.
+          // If _traccarDevices were to be fetched from BLoC, this is where BlocBuilder would wrap the DropdownButton.
+          DropdownButtonHideUnderline( // Hides the default underline
+            child: DropdownButton<String>(
+              value: _selectedTraccarDevice,
+              isExpanded: true, // Make dropdown take full available width
+              dropdownColor: AppColors.markerBg1, // Background color of the dropdown menu
+              style: const TextStyle(color: Colors.white, fontSize: 16.0, fontWeight: FontWeight.bold),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.white), // Custom icon
+              onChanged: (String? newValue) {
+                setState(() {
+                  _selectedTraccarDevice = newValue;
+                  // Handle selection change: e.g., if "This Device" is selected, follow current location.
+                  // If another device is selected, you might fetch its last known location via BLoC.
+                  print("Selected device: $_selectedTraccarDevice");
+                });
+                // If you need to trigger a BLoC event based on selection:
+                // _mapBloc.add(LoadDeviceLocation(newValue));
+              },
+              items: _traccarDevices.map<DropdownMenuItem<String>>((String device) {
+                return DropdownMenuItem<String>(
+                  value: device,
+                  child: Text(
+                    device,
+                    style: const TextStyle(color: Colors.white), // Text color for items
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 4.0),
+          Text(
+            _locationText,
+            style: const TextStyle(color: Colors.white70, fontSize: 12.0),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapContent() {
+    return Stack(
+      children: [
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: _currentMapCenter,
+            initialZoom: 15.0,
+            maxZoom: 18.0,
+            minZoom: 3.0,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.starust.bikerr',
+            ),
+            RichAttributionWidget(
+              attributions: [
+                TextSourceAttribution(
+                  'OpenStreetMap contributors',
+                  onTap: () => launchUrl(Uri.parse('https://openstreetmap.org/copyright')),
+                ),
+              ],
+              alignment: AttributionAlignment.bottomRight,
+            ),
+            CurrentLocationLayer(
+              key: const ValueKey("CurrentLocationMarker"),
+              positionStream: Geolocator.getPositionStream(
+                locationSettings: const LocationSettings(
+                  accuracy: LocationAccuracy.high,
+                  distanceFilter: 0,
+                ),
+              ).map((position) => LocationMarkerPosition(
+                latitude: position.latitude,
+                longitude: position.longitude,
+                accuracy: position.accuracy,
+              )),
+              style: LocationMarkerStyle(
+                showAccuracyCircle: true,
+                marker: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.navigation,
+                      color: AppColors.bikerrRedFill,
+                      size: 24.0,
+                    ),
+                  ),
+                ),
+                markerSize: const Size(40, 40),
+                markerDirection: MarkerDirection.heading,
+                accuracyCircleColor: AppColors.markerBg1.withOpacity(0.3),
+                headingSectorColor: AppColors.markerBg1.withOpacity(0.7),
+                headingSectorRadius: 60,
+              ),
+              alignPositionOnUpdate: AlignOnUpdate.always,
+              alignPositionAnimationDuration: const Duration(milliseconds: 500),
+              alignPositionAnimationCurve: Curves.easeOutCubic,
+              alignDirectionAnimationDuration: const Duration(milliseconds: 300),
+              alignDirectionAnimationCurve: Curves.easeOut,
+            ),
+          ],
+        ),
+        Positioned(
+          top: 10.0,
+          left: 10.0,
+          child: _buildTraccarDropDown(),
+        ),
+      ],
     );
   }
 }

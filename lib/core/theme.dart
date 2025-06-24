@@ -11,10 +11,11 @@ class FontSizes {
 
 class AppColors {
   static const Color greyText = Color(0xFFB3B9C9);
+  static Color markerBg1 = const Color(0xFF000000).withValues(alpha: 0.5);
   static const Color whiteText = Color(0xFFFFFFFF);
   static const Color senderMessage = Color(0xFF7A8194);
   static const Color receiverMessage = Color(0xFF373E4E);
-  static const Color sentMessaheInput = Color(0xFF3D4354);
+  static const Color sentMessageInput = Color(0xFF3D4354);
   static const Color messageListPage = Color.fromARGB(255, 39, 41, 46);
   static const Color buttonColor = Color(0xFF7A8194);
   static const Color bgColor = Color(0xFF0F0F0F);

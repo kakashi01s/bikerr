@@ -10,6 +10,8 @@ import 'package:bikerr/utils/enums/enums.dart';
 import 'package:bikerr/utils/exceptions/app_exceptions.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:http/http.dart' as http;
+import 'package:traccar_gennissi/traccar_gennissi.dart';
 part 'auth_event.dart';
 part 'auth_state.dart';
 
@@ -241,7 +243,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             jwtAccessToken: user.jwtAccessToken, // Use nullable properties
           );
           print("Session data saved.");
+          final dummyResponse = http.Response('', 200, headers: {
+            // Assuming traccarToken is the raw JSESSIONID value
+            'set-cookie': 'JSESSIONID=${user.traccarToken}; Path=/; HttpOnly',
+            // You might need to adjust 'Path=/' or 'HttpOnly' based on how Traccar sets it
+            // Or if traccarToken is already the full 'JSESSIONID=value' string:
+            // 'set-cookie': '${user.traccarToken}; Path=/; HttpOnly',
+          });
 
+          await Traccar.updateCookie(dummyResponse);
           emit(
             state.copywith(
               postApiStatus: PostApiStatus.success,
