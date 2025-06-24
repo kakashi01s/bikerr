@@ -7,6 +7,7 @@ import 'package:bikerr/core/theme.dart';
 import 'package:bikerr/features/map/presentation/bloc/map_bloc.dart';
 import 'package:bikerr/features/map/presentation/widgets/action_bar.dart';
 import 'package:bikerr/features/map/presentation/widgets/app_bar.dart';
+import 'package:bikerr/services/session/session_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -27,6 +28,7 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  final SessionManager sessionManager = SessionManager.instance;
   final MapBloc _mapBloc = MapBloc(getCurrentLocationUsecase: sl());
   final MapController _mapController = MapController();
 

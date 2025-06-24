@@ -14,6 +14,7 @@ class SessionManager {
   int? traccarId; // Assuming traccarId is an integer
   String? jwtRefreshToken;
   String? jwtAccessToken;
+  String? traccarToken;
   // Removed expiryDate related code
   // ------------------------------------------
 
@@ -23,6 +24,7 @@ class SessionManager {
     required int? traccarId, // Accept nullable int
     required String? jwtRefreshToken,
     required String? jwtAccessToken,
+    required String? traccarToken,
     // -----------------------------
   }) async {
     // Assign to properties
@@ -30,6 +32,7 @@ class SessionManager {
     this.traccarId = traccarId;
     this.jwtRefreshToken = jwtRefreshToken;
     this.jwtAccessToken = jwtAccessToken;
+    this.traccarToken = traccarToken;
 
     // Write to storage (storage.write handles null by deleting the key)
     await Future.wait([
@@ -38,6 +41,7 @@ class SessionManager {
       storage.write(key: "traccarId", value: traccarId?.toString()),
       storage.write(key: "jwtRefreshToken", value: jwtRefreshToken),
       storage.write(key: "jwtAccessToken", value: jwtAccessToken),
+      storage.write(key: "traccarToken", value: traccarToken),
     ]);
   }
 
@@ -48,6 +52,8 @@ class SessionManager {
       storage.read(key: 'traccarId'),
       storage.read(key: 'jwtRefreshToken'),
       storage.read(key: 'jwtAccessToken'),
+      storage.read(key: 'traccarToken'),
+
     ]);
 
     // Assign and parse as necessary
@@ -56,6 +62,7 @@ class SessionManager {
     traccarId = response[1] != null ? int.tryParse(response[1]!) : null;
     jwtRefreshToken = response[2];
     jwtAccessToken = response[3];
+    traccarToken = response[4];
   }
 
   Future<void> clearSession() async {
@@ -64,6 +71,7 @@ class SessionManager {
     traccarId = null;
     jwtRefreshToken = null;
     jwtAccessToken = null;
+    traccarToken = null;
 
     // Delete keys from storage
     await Future.wait([
@@ -71,6 +79,8 @@ class SessionManager {
       storage.delete(key: 'traccarId'),
       storage.delete(key: 'jwtRefreshToken'),
       storage.delete(key: 'jwtAccessToken'),
+      storage.delete(key: 'traccarToken'),
+
     ]);
   }
 

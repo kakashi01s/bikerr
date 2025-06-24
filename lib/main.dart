@@ -6,6 +6,7 @@ import 'package:bikerr/utils/socket/socket_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:traccar_gennissi/traccar_gennissi.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +15,7 @@ Future<void> main() async {
   await di.init();
   final socketService = SocketService();
   await socketService.initSocket();
-
+  // await Traccar.initializeTraccarUrls();
   runApp(const MyApp());
 }
 

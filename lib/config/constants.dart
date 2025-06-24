@@ -1,5 +1,6 @@
 class AppUrl {
   static const String baseUrl = 'https://node-bikerr.onrender.com';
+  static const String baseTraccarUrl = 'http://13.60.88.192:8082/api';
 
   static const String appBaseUrl = '$baseUrl/api/v1';
   static const String S3_BASE_URL =

@@ -234,6 +234,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           // Login success response should contain tokens and user data
           final user = success.data!;
           print("User logged in successfully: ${user.id}");
+          print("User traccar token: ${user.traccarToken}");
 
           // Save session data including tokens
           await sessionManager.setSession(
@@ -241,17 +242,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             traccarId: user.traccarId,
             jwtRefreshToken: user.jwtRefreshToken, // Use nullable properties
             jwtAccessToken: user.jwtAccessToken, // Use nullable properties
+            traccarToken: user.traccarToken
           );
           print("Session data saved.");
-          final dummyResponse = http.Response('', 200, headers: {
-            // Assuming traccarToken is the raw JSESSIONID value
-            'set-cookie': 'JSESSIONID=${user.traccarToken}; Path=/; HttpOnly',
-            // You might need to adjust 'Path=/' or 'HttpOnly' based on how Traccar sets it
-            // Or if traccarToken is already the full 'JSESSIONID=value' string:
-            // 'set-cookie': '${user.traccarToken}; Path=/; HttpOnly',
-          });
-
-          await Traccar.updateCookie(dummyResponse);
+          await Traccar.setBearerToken(user.traccarToken ?? "Empty Traccar Token", user.traccarId ?? 0);
           emit(
             state.copywith(
               postApiStatus: PostApiStatus.success,

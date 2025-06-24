@@ -47,11 +47,8 @@ dependencies:
   firebase_messaging: ^15.2.5
   flutter_svg: ^2.1.0
   equatable: ^2.0.7
-<<<<<<< HEAD
-#  awesome_snackbar_content: ^0.1.5
-=======
+  #awesome_snackbar_content: ^0.1.5
   awesome_snackbar_content: ^0.1.6
->>>>>>> 51b95716cb9618a35edf42f03bfef22885e85a10
   flutter_map: ^8.1.1
   location: ^8.0.0
   latlong2: ^0.9.1
