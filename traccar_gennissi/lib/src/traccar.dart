@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:traccar_gennissi/traccar_gennissi.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'model/Device.dart';
 import 'model/Event.dart';
 import 'model/GeofenceModel.dart';
@@ -20,26 +22,39 @@ import 'model/Trip.dart';
 
 class Traccar {
   static Map<String, String> headers = {'Content-Type': 'application/json'};
-  static String? serverURL;
-  static String? socketURL;
+  static String? serverURL = 'http://13.60.88.192:8082';
+  static String? socketURL = 'ws://13.60.88.192:8082/api/socket';
   static String? sessionCookie;
-  static WebSocket? _webSocket;
+  static String? traccarToken;
+  static WebSocketChannel? _webSocket;
   static final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static const String _sessionKey = 'JSESSIONID';
-  static final StreamController<dynamic> _webSocketController = StreamController<dynamic>.broadcast(); // New: StreamController
+  static const String _tokenKey = 'traccarToken';
+  static const String _idKey = 'traccarId';
+  static var _traccarId;
+  static StreamController<dynamic> _webSocketController = StreamController<dynamic>.broadcast(); // New: StreamController
 
-  static Future<void> saveSessionCookie(String cookie) async {
+  static Future<void> saveSessionCookie(String cookie, String token, traccarId) async {
     sessionCookie = cookie;
+    traccarToken = token;
     await _secureStorage.write(key: _sessionKey, value: cookie);
+    await _secureStorage.write(key: _tokenKey, value: token);
+
     headers['Cookie'] = sessionCookie!;
+    headers["Authorization"] = "Bearer $token";
     print("[Traccar] Session cookie saved: $cookie");
   }
 
   static Future<void> loadSessionCookie() async {
     sessionCookie = await _secureStorage.read(key: _sessionKey);
+    traccarToken = await _secureStorage.read(key: _tokenKey);
+    _traccarId = await _secureStorage.read(key: _idKey);
     if (sessionCookie != null) {
       headers['Cookie'] = sessionCookie!;
+      //headers["Authorization"] = "Bearer $traccarToken";
       print("[Traccar] Session cookie loaded: $sessionCookie");
+      print("[Traccar] Traccar token loaded: $traccarToken");
+      print("[Traccar] Traccar Id loaded: $_traccarId");
     } else {
       print("[Traccar] No session cookie found.");
     }
@@ -52,45 +67,30 @@ class Traccar {
     print("[Traccar] Session cookie cleared.");
   }
 
-  static Future<bool> refreshSessionCookie(String token) async {
-    try {
-      final response = await http.get(Uri.parse('$serverURL/api/session?token=$token'));
-      if (response.statusCode == 200) {
-        updateCookie(response);
-        return true;
-      }
-    } catch (e) {
-      print("Error refreshing session cookie: $e");
-    }
-    return false;
-  }
+  // static Future<bool> refreshSessionCookie(String token) async {
+  //   try {
+  //     final response = await http.get(Uri.parse('$serverURL/api/session?token=$token'));
+  //     if (response.statusCode == 200) {
+  //       updateCookie(response,token);
+  //       return true;
+  //     }
+  //   } catch (e) {
+  //     print("Error refreshing session cookie: $e");
+  //   }
+  //   return false;
+  // }
 
   static Future<http.Response?> loginWithToken(String token) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    if (prefs.containsKey('url')) {
-      serverURL = prefs.get('url').toString();
-      var uri = Uri.parse(serverURL!);
-      String socketScheme = uri.scheme == "http" ? "ws://" : "wss://";
-      socketURL = uri.hasPort
-          ? "$socketScheme${uri.host}:${uri.port}/api/socket"
-          : "$socketScheme${uri.host}/api/socket";
-    } else {
-      serverURL = "http://demo.traccar.org";
-    }
 
     final uri = Uri.parse("$serverURL/api/session?token=$token");
     final response = await http.get(uri);
 
     if (response.statusCode == 200) {
-      final rawCookie = response.headers['set-cookie'];
-      if (rawCookie != null) {
-        final cookie = rawCookie.split(';').firstWhere(
-              (c) => c.trim().startsWith('JSESSIONID'),
-          orElse: () => '',
-        ).trim();
-        await saveSessionCookie(cookie);
-      }
+      final user = jsonDecode(response.body);
+      print(user['id']);
+        final cookie = response.headers['set-cookie']!.split(';')[0];
+        await saveSessionCookie(cookie, token, user['id']);
+
       return response;
     } else {
       print("Login failed with status: ${response.statusCode}");
@@ -98,38 +98,19 @@ class Traccar {
     }
   }
 
-  static Future<bool> login(String purchaseCode, email, password) async {
-    final prefs = await SharedPreferences.getInstance();
-    serverURL = prefs.getString('url') ?? 'http://13.60.88.192:8082'; // Use local IP for now as it was in previous traccar.dart
-    socketURL = prefs.getString('socketUrl') ?? 'ws://13.60.88.192:8082/api/socket';
 
-    final response = await http.post(
-      Uri.parse('$serverURL/api/session'),
-      headers: headers,
-      body: json.encode({'email': email, 'password': password}),
-    );
-    if (response.statusCode == 200) {
-      updateCookie(response);
-      await prefs.setString('email', email);
-      await prefs.setString('password', password);
-      return true;
-    } else {
-      print(response.statusCode);
-      return false;
-    }
-  }
-
-  static void updateCookie(http.Response response) {
-    String? rawCookie = response.headers['set-cookie'];
-    if (rawCookie != null) {
-      int index = rawCookie.indexOf(';');
-      if (index == -1) {
-        saveSessionCookie(rawCookie);
-      } else {
-        saveSessionCookie(rawCookie.substring(0, index));
-      }
-    }
-  }
+  //
+  // static void updateCookie(http.Response response, String token) {
+  //   String? rawCookie = response.headers['set-cookie'];
+  //   if (rawCookie != null) {
+  //     int index = rawCookie.indexOf(';');
+  //     if (index == -1) {
+  //       saveSessionCookie(rawCookie,token);
+  //     } else {
+  //       saveSessionCookie(rawCookie.substring(0, index),token);
+  //     }
+  //   }
+  // }
 
   static Future<bool> sessionLogout() async {
     try {
@@ -149,68 +130,98 @@ class Traccar {
   }
 
   // Modified: connectWebSocket now returns a Stream
-  static Stream<dynamic>? connectWebSocket() {
+  static Future<Stream<dynamic>?> connectWebSocket() async {
+    await loadSessionCookie();
+    print("Traccar Session cookie $sessionCookie");
+
     if (socketURL == null || sessionCookie == null) {
       print("WebSocket connection failed: socketURL or sessionCookie is null.");
       return null;
     }
+
+    // Reinitialize the stream controller if it's null or closed
+    if (_webSocketController == null || _webSocketController!.isClosed) {
+      _webSocketController = StreamController<dynamic>.broadcast();
+    }
+    final headers = {
+      HttpHeaders.cookieHeader: sessionCookie,
+    };
     try {
-      // Corrected: WebSocket.connect returns a Future<WebSocket>.
-      // We call .then() on this Future to handle the connected WebSocket.
-      WebSocket.connect(socketURL!, headers: {'Cookie': sessionCookie!}).then((ws) {
-        _webSocket = ws; // Assign the connected WebSocket to _webSocket
-        print("[Traccar] WebSocket Connected to $socketURL");
-        _webSocket?.listen( // Use _webSocket for listening now
-              (data) {
-            // Process the incoming data and add it to the stream controller
-            print("[Traccar] WebSocket Data received: $data");
+      final ws = await IOWebSocketChannel.connect(
+        socketURL!,
+        headers: headers,
+      );
+      _webSocket = ws;
+      print("[Traccar] WebSocket Connected to $socketURL");
+
+      _webSocket!.stream.listen(
+            (data) {
+          print("[Traccar] WebSocket Data received: $data");
+          try {
             final Map<String, dynamic> decodedData = json.decode(data);
             if (decodedData.containsKey('devices')) {
-              _webSocketController.add(Device.fromList(decodedData['devices']));
+              _webSocketController?.add(Device.fromList(decodedData['devices']));
             } else if (decodedData.containsKey('positions')) {
-              _webSocketController.add(PositionModel.fromList(decodedData['positions']));
+              _webSocketController?.add(PositionModel.fromList(decodedData['positions']));
             } else if (decodedData.containsKey('events')) {
-              _webSocketController.add(Event.fromList(decodedData['events']));
+              _webSocketController?.add(Event.fromList(decodedData['events']));
             } else {
-              _webSocketController.add(data); // Fallback for other data types
+              _webSocketController?.add(data); // Fallback for other data
             }
-          },
-          onError: (error) {
-            print("[Traccar] WebSocket Error: $error");
-            _webSocketController.addError(error);
-          },
-          onDone: () {
-            print("[Traccar] WebSocket Disconnected.");
-            _webSocketController.close(); // Close the controller when WebSocket is done
-            _webSocket = null;
-          },
-        );
-      }).catchError((e) {
-        print("[Traccar] WebSocket connection error: $e");
-        _webSocketController.addError(e);
-      });
-      return _webSocketController.stream; // Return the stream from the controller
+          } catch (e) {
+            print("[Traccar] JSON decode error: $e");
+            _webSocketController?.addError(e);
+          }
+        },
+        onError: (error) {
+          print("[Traccar] WebSocket Error: $error");
+          _webSocketController?.addError(error);
+        },
+        onDone: () {
+          print("[Traccar] WebSocket Disconnected.");
+          _webSocketController?.close();
+          _webSocket = null;
+        },
+      );
+
+      return _webSocketController!.stream;
     } catch (e) {
       print("[Traccar] Error connecting WebSocket: $e");
-      _webSocketController.addError(e);
+      _webSocketController?.addError(e);
       return null;
     }
   }
 
   static void disconnectWebSocket() {
-    _webSocket?.close();
+    _webSocket?.sink.close();
     _webSocket = null;
-    if (!_webSocketController.isClosed) { // Ensure controller is not already closed
-      _webSocketController.close();
-    }
+    _webSocketController?.close();
+
     print("[Traccar] WebSocket manually disconnected.");
   }
 
   static Future<List<Device>?> getDevices() async {
+    loadSessionCookie();
+    final headers = {"Authorization":"Bearer $traccarToken"};
     try {
-      final response = await http.get(Uri.parse('$serverURL/api/devices'), headers: headers);
+      // 1. Construct the Uri
+      final uri = Uri.parse('$serverURL/api/devices').replace(
+        queryParameters: {
+          'userId': _traccarId, // Add the userId as a query parameter
+        },
+      );
+
+      // 2. Make the HTTP GET request
+      final response = await http.get(
+        uri, // Use the constructed Uri object
+        headers: headers,
+      );
+      print("Getting traccar devices");
       if (response.statusCode == 200) {
-        return Device.fromList(json.decode(response.body));
+        Iterable list = json.decode(response.body);
+        print("traccar devices ${list}");
+        return list.map((model) => Device.fromJson(model)).toList();
+
       } else {
         print(response.statusCode);
         return null;

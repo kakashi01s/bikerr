@@ -26,33 +26,69 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<StartTraccarWebSocket>(_onStartTraccarWebSocket); // New: Handle WebSocket start
     on<StopTraccarWebSocket>(_onStopTraccarWebSocket);   // New: Handle WebSocket stop
     on<TraccarDataReceived>(_onTraccarDataReceived);     // New: Handle WebSocket data
+    on<LocationTrackingError>(_onLocationTrackingError);
   }
 
   Future<void> _getUserDevices(GetUserTraccarDevices event, Emitter<MapState> emit) async {
+    print("Getting traccar devices");
     emit(state.copyWith(postApiStatus: PostApiStatus.loading));
-    final result = await traccarUseCase.getUserDevices() ?? [];
-    print("[Map Bloc] User Devices Loaded ${result.toString()}");
-    emit(state.copyWith(traccarDevices: result, postApiStatus: PostApiStatus.success));
+
+    final response = await traccarUseCase.getUserDevices();
+    print(" traccar devices");
+    emit(state.copyWith(postApiStatus: PostApiStatus
+    .success, traccarDevices: response));
+
   }
 
-  Future<void> _startContinuousLocationUpdates(Emitter<MapState> emit) async {
+  Future<bool> _checkLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        // Permissions are denied, handle this case (e.g., show a dialog to the user)
+        print("Location permissions are denied.");
+        // You might want to emit an error state here
+        add(LocationTrackingError("Location permissions denied. Please enable them in settings."));
+        return false;
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      // Permissions are denied forever, handle this case (e.g., guide user to settings)
+      print("Location permissions are permanently denied.");
+      // You might want to emit an error state here
+      add(LocationTrackingError("Location permissions permanently denied. Please enable them in app settings."));
+      return false;
+    }
+    // Permissions are granted, proceed
+    print("Location permissions granted.");
+    return true;
+  }
+
+
+  Future<void> _startContinuousLocationUpdates() async { // Removed Emitter emit from here
     final locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 10,
-      timeLimit: const Duration(seconds: 5),
+      timeLimit: const Duration(seconds: 10),
     );
     _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
           (Position position) {
         add(LocationUpdated(position));
       },
       onError: (e) {
-        emit(
-          state.copyWith(
-            postApiStatus: PostApiStatus.error,
-            errorMessage: e.toString(),
-          ),
-        );
+        // Instead of emitting directly, add a new event to the bloc
+        add(LocationTrackingError(e.toString()));
       },
+    );
+  }
+
+  // New Event Handler for Location Tracking Errors
+  void _onLocationTrackingError(LocationTrackingError event, Emitter<MapState> emit) {
+    emit(
+      state.copyWith(
+        postApiStatus: PostApiStatus.error,
+        errorMessage: event.errorMessage,
+      ),
     );
   }
 
@@ -64,9 +100,20 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       return;
     }
 
+    final hasPermission = await _checkLocationPermission(); // Check permissions first
+    if (!hasPermission) {
+      return; // Stop if permissions are not granted
+    }
+
     try {
-      await _startContinuousLocationUpdates(emit);
+      // You don't need to await _startContinuousLocationUpdates because
+      // it sets up a stream listener that runs independently.
+      // The initial emission might be for 'loading' or 'success' if needed immediately.
+      await _startContinuousLocationUpdates(); // Call the stream setup
+      emit(state.copyWith(postApiStatus: PostApiStatus.success)); // Or an appropriate initial state
     } catch (e) {
+      // This catch block would only catch errors from _startContinuousLocationUpdates itself,
+      // not from the stream's onError.
       emit(
         state.copyWith(
           postApiStatus: PostApiStatus.error,
@@ -80,11 +127,15 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       GetInitialLocation event,
       Emitter<MapState> emit,
       ) async {
-    final fetchOnce = event.fetchOnce; // Assuming fetchOnce is a property of GetInitialLocation
+    final fetchOnce = event.fetchOnce;
     if (state.postApiStatus == PostApiStatus.loading) {
       return;
     }
 
+    final hasPermission = await _checkLocationPermission(); // Check permissions first
+    if (!hasPermission) {
+      return; // Stop if permissions are not granted
+    }
     try {
       if (fetchOnce) {
         final initialPositionResult =
@@ -106,7 +157,9 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         // Start continuous tracking after initial fetch
         add(StartLocationTracking());
       } else {
-        await _startContinuousLocationUpdates(emit);
+        await _startContinuousLocationUpdates(); // Call the stream setup
+        // If you need to emit a state right after starting continuous updates, do it here
+        emit(state.copyWith(postApiStatus: PostApiStatus.success));
       }
     } catch (e) {
       emit(
@@ -143,8 +196,10 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     try {
       // Ensure previous subscription is cancelled before starting a new one
       await _webSocketSubscription?.cancel();
-      _webSocketSubscription = Traccar.connectWebSocket()?.listen(
-            (data) {
+      final stream = await Traccar.connectWebSocket();
+
+      stream?.listen(
+            (data)  {
           add(TraccarDataReceived(data));
         },
         onError: (error) {
@@ -190,4 +245,6 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     Traccar.disconnectWebSocket(); // New: Ensure WebSocket is disconnected
     return super.close();
   }
+
+
 }

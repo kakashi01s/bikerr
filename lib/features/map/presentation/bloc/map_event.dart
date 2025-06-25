@@ -6,7 +6,14 @@ abstract class MapEvent extends Equatable {
   @override
   List<Object?> get props => [];
 }
+class LocationTrackingError extends MapEvent {
+  final String errorMessage;
 
+  const LocationTrackingError(this.errorMessage);
+
+  @override
+  List<Object> get props => [errorMessage];
+}
 class GetInitialLocation extends MapEvent {
   final bool fetchOnce; // Added fetchOnce property
 
