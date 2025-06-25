@@ -13,6 +13,7 @@ class UserModel extends UserEntity {
     required String jwtAccessToken,
     required String traccarToken,
     required String profileImageKey,
+    required String sessionCookie,
 
     require,
   }) : super(
@@ -27,6 +28,7 @@ class UserModel extends UserEntity {
          jwtAccessToken: jwtAccessToken,
          traccarToken: traccarToken,
          profileImageKey: profileImageKey,
+          sessionCookie: sessionCookie,
        );
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -50,6 +52,7 @@ class UserModel extends UserEntity {
       jwtAccessToken: json['accessToken'] ?? '',
       traccarToken: json['traccarToken'] ?? '',
       profileImageKey: json['profileImageKey'] ?? '',
+      sessionCookie: json['sessionCookie'] ?? '',
     );
   }
 }

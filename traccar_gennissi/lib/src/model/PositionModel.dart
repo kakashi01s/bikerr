@@ -9,11 +9,11 @@ class PositionModel {
   final double? speed;
   final double? course;
   final String? address;
-  final String? accuracy;
+  final double? accuracy; // <--- CHANGE THIS FROM String? TO double?
   final String? deviceTime;
   final String? serverTime;
   final String? fixTime;
-  final dynamic attributes;
+  final dynamic attributes; // This can remain dynamic if you're not strictly typing it yet
 
   PositionModel({
     this.id,
@@ -25,7 +25,7 @@ class PositionModel {
     this.speed,
     this.course,
     this.address,
-    this.accuracy,
+    this.accuracy, // <--- Now it matches double?
     this.deviceTime,
     this.serverTime,
     this.fixTime,
@@ -34,20 +34,20 @@ class PositionModel {
 
   factory PositionModel.fromJson(Map<String, dynamic> json) {
     return PositionModel(
-      id: json['id'],
-      deviceId: json['deviceId'],
-      type: json['type'],
-      latitude: json['latitude'],
-      longitude: json['longitude'],
-      altitude: json['altitude'],
-      speed: json['speed'],
-      course: json['course'],
-      address: json['address'],
-      accuracy: json['accuracy'],
-      deviceTime: json['deviceTime'],
-      serverTime: json['serverTime'],
-      fixTime: json['fixTime'],
-      attributes: json['attributes'],
+      id: json['id'] as int?, // Explicitly cast with 'as Type?' for safety
+      deviceId: json['deviceId'] as int?,
+      type: json['type'] as int?, // Traccar's 'type' is usually int or null
+      latitude: json['latitude'] as double?,
+      longitude: json['longitude'] as double?,
+      altitude: json['altitude'] as double?,
+      speed: json['speed'] as double?,
+      course: json['course'] as double?,
+      address: json['address'] as String?, // Keep as String? as it's null in your sample
+      accuracy: json['accuracy'] as double?, // <--- Cast as double?
+      deviceTime: json['deviceTime'] as String?,
+      serverTime: json['serverTime'] as String?,
+      fixTime: json['fixTime'] as String?,
+      attributes: json['attributes'], // Keep as dynamic if not creating a separate model
     );
   }
 

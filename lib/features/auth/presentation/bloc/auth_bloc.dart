@@ -235,22 +235,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           final user = success.data!;
           print("User logged in successfully: ${user.id}");
           print("User traccar token: ${user.traccarToken}");
+          print("User Session token: ${user.sessionCookie}");
 
-         final traccarlogin =  await Traccar.loginWithToken(user.traccarToken!, user.traccarId);
 
-         if(traccarlogin?.statusCode != 200 || traccarlogin == null){
-           print("Error in Login with Traccar");
-           emit(
-             state.copywith(
-               postApiStatus: PostApiStatus.error,
-               message: "Error Logging in with traccar", // Emit the String error message
-               requiresReauthentication:
-               false, // It was a login credential error, not reauth
-             ),
-           );
-           print("AuthBloc: Login error state emitted at login with traccar");
-           return;
-         }
           // Save session data including tokens
           await sessionManager.setSession(
             userId: '${user.id}',
@@ -258,9 +245,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             jwtRefreshToken: user.jwtRefreshToken, // Use nullable properties
             jwtAccessToken: user.jwtAccessToken, // Use nullable properties
             traccarToken: user.traccarToken,
-            traccarCookie: Traccar.sessionCookie
+            traccarCookie: user.sessionCookie
           );
 
+          await Traccar.saveSessionCookie(user.sessionCookie!, user.traccarToken!, user.traccarId!);
           print("Session data saved.");
         //  await Traccar.setBearerToken(user.traccarToken ?? "Empty Traccar Token", user.traccarId ?? 0);
           emit(

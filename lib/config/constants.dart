@@ -1,5 +1,6 @@
 class AppUrl {
-  static const String baseUrl = 'https://node-bikerr.onrender.com';
+  static const String baseUrl = 'https://node-bikerr.onrender.com';  // PRODUCTION
+  // static const String baseUrl = 'http://192.168.1.12:6000';  // LOCAL
   static const String baseTraccarUrl = 'http://13.60.88.192:8082/api';
   static const String GetTraccarSession = 'http://13.60.88.192:8082/api/session';
 

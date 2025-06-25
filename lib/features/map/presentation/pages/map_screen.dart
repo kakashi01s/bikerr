@@ -158,7 +158,7 @@ class _MapScreenState extends State<MapScreen> {
                 children: [
                   Expanded(child: dropdownContent),
                   const SizedBox(width: 8),
-                  const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  const CircularProgressIndicator(strokeWidth: 1, color: Colors.white, constraints: BoxConstraints(maxWidth: 2, maxHeight: 2),),
                 ],
               )
             else if (state.postApiStatus == PostApiStatus.error)

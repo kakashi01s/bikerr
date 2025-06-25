@@ -217,6 +217,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                                   jwtAccessToken: '',
                                   traccarToken: '',
                                   profileImageKey: '',
+                                  sessionCookie: ''
                                 ),
                                 timestamp: (convo.createdAt ?? DateTime.now())
                                     .toIso8601String(),

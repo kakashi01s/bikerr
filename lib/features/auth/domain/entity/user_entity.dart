@@ -13,6 +13,7 @@ class UserEntity {
   final String? jwtAccessToken;
   final String? traccarToken;
   final String? profileImageKey;
+  final String? sessionCookie;
 
   UserEntity({
     required this.jwtRefreshToken,
@@ -29,5 +30,6 @@ class UserEntity {
     this.resetToken = ' ',
     this.message = '',
     this.profileImageKey = '',
+    this.sessionCookie = ''
   });
 }

@@ -8,6 +8,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:traccar_gennissi/traccar_gennissi.dart';
 
+import '../../../../services/session/session_manager.dart';
+
 part 'map_event.dart';
 part 'map_state.dart';
 
@@ -79,7 +81,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     final locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 10,
-      timeLimit: const Duration(seconds: 10),
+      timeLimit: const Duration(seconds: 15),
     );
     _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
           (Position position) {
@@ -204,6 +206,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       Emitter<MapState> emit,
       ) async {
     try {
+      final SessionManager sessionManager = SessionManager.instance;
       // Ensure previous subscription is cancelled before starting a new one
       await _webSocketSubscription?.cancel();
       final stream = await Traccar.connectWebSocket();

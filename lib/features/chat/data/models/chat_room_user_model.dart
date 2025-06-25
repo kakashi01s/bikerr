@@ -41,7 +41,8 @@ class ChatRoomUserModel extends ChatRoomUserEntity {
             jwtAccessToken: '',
             traccarId: null,
             traccarToken: '',
-            profileImageKey: ''
+            profileImageKey: '',
+            sessionCookie: ''
           // ... any other required fields for UserModel
         );
       }
@@ -65,7 +66,8 @@ class ChatRoomUserModel extends ChatRoomUserEntity {
           jwtAccessToken: '',
           traccarId: null,
           traccarToken: '',
-          profileImageKey: ''
+          profileImageKey: '',
+        sessionCookie: ''
         // ... other required fields
       );
     }

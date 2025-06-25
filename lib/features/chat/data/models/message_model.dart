@@ -87,6 +87,7 @@ class MessageModel extends MessageEntity {
               jwtAccessToken: '',
               traccarToken: '',
               profileImageKey: null ?? '', // Default nullable field
+          sessionCookie: ''
             );
 
     // Get the timestamp string (if used - logs show backend uses createdAt)

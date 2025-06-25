@@ -14,7 +14,7 @@ class Traccar {
   static const _idKey = 'traccar_id';
 
   static final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
-  static final StreamController<dynamic> _webSocketController = StreamController<dynamic>.broadcast();
+  static StreamController<dynamic> _webSocketController = StreamController<dynamic>.broadcast();
 
   static String? serverURL = 'http://13.60.88.192:8082';
   static String? socketURL = 'ws://13.60.88.192:8082/api/socket';
@@ -30,13 +30,13 @@ class Traccar {
     if (_traccarToken != null) 'Authorization': 'Bearer $_traccarToken',
   };
 
-  static Future<void> saveSessionCookie(String cookie, String token, int traccarId) async {
-    print('[Traccar] Saving cookie $cookie');
-    await _secureStorage.write(key: _cookieKey, value: cookie);
-    await _secureStorage.write(key: _tokenKey, value: token);
+  static Future<void> saveSessionCookie(String sessionCookie, String traccarToken, int traccarId) async {
+    print('[Traccar] Saving cookie $sessionCookie');
+    await _secureStorage.write(key: _cookieKey, value: sessionCookie);
+    await _secureStorage.write(key: _tokenKey, value: traccarToken);
     await _secureStorage.write(key: _idKey, value: traccarId.toString());
 
-    _traccarToken = token;
+    _traccarToken = traccarToken;
     _traccarId = traccarId;
   }
 
@@ -59,30 +59,96 @@ class Traccar {
     defaultHeaders.remove('Authorization');
   }
 
-  static Future<http.Response?> loginWithToken(String token, int? traccarId) async {
+
+  static Future<Stream<dynamic>?> connectWebSocket() async {
+    await loadSessionCookieAndBearerToken();
+
+    print("Socket Url$socketURL");
+    print("Session Cookie$sessionCookie");
+
+    if (socketURL == null || sessionCookie == null) {
+      print("[Traccar] WebSocket connection failed: Missing URL or session.");
+      return null;
+    }
+
+
+
     try {
-      final uri = Uri.parse("$serverURL/api/session?token=$token");
-      final response = await http.get(uri);
+      final ws = IOWebSocketChannel.connect(
+        socketURL!,
+        headers: {HttpHeaders.cookieHeader: sessionCookie!},
+      );
+      _webSocket = ws;
 
-      if (response.statusCode == 200) {
-       // final user = jsonDecode(response.body);
-        final cookieHeader = response.headers['set-cookie'];
-        if (cookieHeader != null) {
-          final cookie = cookieHeader.split(';').first;
 
-          print("[Traccar] Got Session Cookie  $cookie");
-          await saveSessionCookie(cookie, token,traccarId!);
-        }
-        return response;
-      } else {
-        print("Login failed: ${response.statusCode}");
-        return null;
+      print("[Traccar] WebSocket connected.");
+
+
+      if (_webSocketController.isClosed) {
+        _webSocketController = StreamController<dynamic>.broadcast();
       }
+
+      _webSocket!.stream.listen(
+            (data) {
+
+              if (_webSocketController.isClosed) {
+                print("[Traccar] WebSocket data received after controller closed. Ignoring.");
+                return; // Crucial check
+              }
+          print("[Traccar] WebSocket data: $data");
+          try {
+            final decoded = json.decode(data);
+            if (decoded.containsKey('devices')) {
+              _webSocketController.add(decoded['devices'].map((model) => Device.fromJson(model)).toList());
+             // _webSocketController.add(Device.fromList(decoded['devices']));
+            } else if (decoded.containsKey('positions')) {
+              _webSocketController.add(PositionModel.fromList(decoded['positions']));
+            } else if (decoded.containsKey('events')) {
+              _webSocketController.add(Event.fromList(decoded['events']));
+            } else {
+              _webSocketController.add(data);
+            }
+          } catch (e) {
+            if (!_webSocketController.isClosed) { // Another crucial check
+              _webSocketController.addError(e);
+            } else {
+              print("[Traccar] WebSocket data decoding error, but controller already closed. Error: $e. Data: $data");
+            }
+          }
+        },
+        onError: (e) {
+          if (!_webSocketController.isClosed) { // Crucial check
+            print("[Traccar] WebSocket error: $e");
+            _webSocketController.addError(e);
+          } else {
+            print("[Traccar] WebSocket error, but controller already closed. Error: $e");
+          }
+          // You might want to close the WebSocket sink here too on error
+          _webSocket?.sink.close();
+          _webSocket = null; // Clear the reference
+        },
+        onDone: () {
+          print("[Traccar] WebSocket disconnected.");
+          if (!_webSocketController.isClosed) { // Crucial check to avoid double-close error
+            _webSocketController.close();
+          }
+          _webSocket = null; // Clear the reference
+        },
+      );
+
+      return _webSocketController.stream;
     } catch (e) {
-      print("Login error: $e");
+      print("[Traccar] WebSocket connect error: $e");
+      if (!_webSocketController.isClosed) { // Ensure controller is closed if connection fails
+        _webSocketController.close();
+      }
       return null;
     }
   }
+
+
+
+
 
   static Future<bool> sessionLogout() async {
     try {
@@ -103,65 +169,6 @@ class Traccar {
       return false;
     }
   }
-
-  static Future<Stream<dynamic>?> connectWebSocket() async {
-    await loadSessionCookieAndBearerToken();
-
-    print("Socket Url$socketURL");
-    print("Session Cookie$sessionCookie");
-
-    if (socketURL == null || sessionCookie == null) {
-      print("[Traccar] WebSocket connection failed: Missing URL or session.");
-      return null;
-    }
-
-    try {
-      final ws = IOWebSocketChannel.connect(
-        socketURL!,
-        headers: {HttpHeaders.cookieHeader: sessionCookie!},
-      );
-      _webSocket = ws;
-
-      print("[Traccar] WebSocket connected.");
-      print("[Traccar] WebSocket connected.");
-
-      _webSocket!.stream.listen(
-            (data) {
-          print("[Traccar] WebSocket data: $data");
-          try {
-            final decoded = json.decode(data);
-            if (decoded.containsKey('devices')) {
-              _webSocketController.add(decoded['devices'].map((model) => Device.fromJson(model)).toList());
-             // _webSocketController.add(Device.fromList(decoded['devices']));
-            } else if (decoded.containsKey('positions')) {
-              _webSocketController.add(PositionModel.fromList(decoded['positions']));
-            } else if (decoded.containsKey('events')) {
-              _webSocketController.add(Event.fromList(decoded['events']));
-            } else {
-              _webSocketController.add(data);
-            }
-          } catch (e) {
-            _webSocketController.addError(e);
-          }
-        },
-        onError: (e) {
-          print("[Traccar] WebSocket error: $e");
-          _webSocketController.addError(e);
-        },
-        onDone: () {
-          print("[Traccar] WebSocket disconnected.");
-          _webSocketController.close();
-          _webSocket = null;
-        },
-      );
-
-      return _webSocketController.stream;
-    } catch (e) {
-      print("[Traccar] WebSocket connect error: $e");
-      return null;
-    }
-  }
-
   static void disconnectWebSocket() {
     _webSocket?.sink.close();
     _webSocket = null;
@@ -169,55 +176,56 @@ class Traccar {
     print("[Traccar] WebSocket manually disconnected.");
   }
 
-  // static Future<List<Device>?> getDevices() async {
-  //   await loadSessionCookieAndBearerToken();
-  //   try {
-  //     print("Using headers $defaultHeaders");
-  //     final uri = Uri.parse('$serverURL/api/devices').replace(queryParameters: {'userId': _traccarId.toString()});
-  //     final response = await http.get(uri, headers: defaultHeaders);
-  //     if (response.statusCode == 200) {
-  //       Iterable list = json.decode(response.body);
-  //       return list.map((json) => Device.fromJson(json)).toList();
-  //     } else {
-  //       print("getDevices failed: ${response.statusCode}");
-  //       return null;
-  //     }
-  //   } catch (e) {
-  //     print("Error in getDevices: $e");
-  //     return null;
-  //   }
-  // }
-
   static Future<List<Device>?> getDevices() async {
+    // Ensure session cookie or bearer token is loaded for authentication
     await loadSessionCookieAndBearerToken();
 
+    // Log authentication details being used (for debugging)
+    print("[Traccar] Attempting to get devices...");
+    print("[Traccar] Current session cookie: $sessionCookie");
+    print("[Traccar] Current Bearer Token: ${_traccarToken != null ? 'Present' : 'Not Present'}");
+    print("[Traccar] Authenticated User ID: $_traccarId");
+
+
+    // Construct the URI for the devices endpoint.
+    // The `/api/devices` endpoint typically returns devices accessible by the
+    // authenticated user based on the session cookie or Authorization header.
+    // Adding `userId` as a query parameter is usually NOT necessary/correct for this endpoint
+    // unless your Traccar setup has specific customizations.
     final uri = Uri.parse('$serverURL/api/devices').replace(queryParameters: {'userId': '$_traccarId'});
-    final response = await http.get(uri, headers: defaultHeaders);
+
+    try {
+      final response = await http.get(uri, headers: defaultHeaders);
+
+      print("[Traccar] Get Devices Response Status: ${response.statusCode}");
+      print("[Traccar] Get Devices Response Body: ${response.body}");
+      print("[Traccar] Get Devices Response Headers: ${response.headers}");
 
 
-    /// Sends an HTTP POST request with the given headers and body to the given URL.
-    ///
-    /// [body] sets the body of the request. It can be a [String], a [List<int>] or
-    /// a [Map<String, String>]. If it's a String, it's encoded using [encoding] and
-    /// used as the body of the request. The content-type of the request will
-    /// default to "text/plain".
-    ///
-    /// If [body] is a List, it's used as a list of bytes for the body of the
-    /// request.
-    ///
-    /// If [body] is a Map, it's encoded as form fields using [encoding]. The
-    /// content-type of the request will be set to
-    /// `"application/x-www-form-urlencoded"`; this cannot be overridden.
-    ///
-    /// [encoding] defaults to [utf8].
-    ///
-    /// For more fine-grained control over the request, use [Request] or
-    /// [StreamedRequest] instead.
-    if (response.statusCode == 200) {
-      Iterable list = json.decode(response.body);
-      return list.map((model) => Device.fromJson(model)).toList();
-    } else {
-      print(response.statusCode);
+      if (response.statusCode == 200) {
+        // Decode the JSON array from the response body
+        final List<dynamic> jsonList = json.decode(response.body);
+
+        // Map each JSON object to a Device model instance
+        List<Device> devices = jsonList.map((model) => Device.fromJson(model as Map<String, dynamic>)).toList();
+
+        print("[Traccar] Successfully retrieved ${devices.length} devices.");
+        return devices;
+      } else {
+        // Handle API error responses
+        print("[Traccar] Get Devices API Error: Status ${response.statusCode}");
+        print("[Traccar] Error response body: ${response.body}");
+        // You might want to throw an exception or return a specific error object here
+        return null;
+      }
+    } catch (e) {
+      // Handle network errors or other exceptions
+      print("[Traccar] Get Devices Network/Unexpected Error: $e");
+      if (e is SocketException) {
+        print("[Traccar] Possible network issue or server not reachable.");
+      } else if (e is FormatException) {
+        print("[Traccar] Response body was not valid JSON.");
+      }
       return null;
     }
   }
