@@ -194,7 +194,11 @@ class _MapScreenState extends State<MapScreen> {
 
 
   _buildMapContent(state ) {
-    return Stack(
+    return
+
+      // _selectedTraccarDevice == "This Device" ?
+
+    Stack(
       children: [
         FlutterMap(
           mapController: _mapController,
@@ -260,6 +264,63 @@ class _MapScreenState extends State<MapScreen> {
         ),
       ],
     );
+
+        //:
+
+    // Stack(
+    //   children: [
+    //     FlutterMap(
+    //       mapController: _mapController,
+    //       options: MapOptions(
+    //         initialCenter: state.position != null
+    //             ? LatLng(state.position!.latitude, state.position!.longitude)
+    //             : LatLng(24.5854, 73.7125), // Default to Udaipur if no position
+    //         initialZoom: 15.0,
+    //         maxZoom: 18.0,
+    //         minZoom: 3.0,
+    //       ),
+    //       children: [
+    //         TileLayer(
+    //           urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    //           // subdomains: ['a', 'b', 'c'],
+    //         ),
+    //         CurrentLocationLayer(
+    //           alignPositionOnUpdate: AlignOnUpdate.always,
+    //           alignDirectionOnUpdate: AlignOnUpdate.always,
+    //           // followOnLocationUpdate: FollowOnLocationUpdate.always,
+    //           style: LocationMarkerStyle(
+    //             showAccuracyCircle: true,
+    //             marker: Container(
+    //               decoration: BoxDecoration(
+    //                 color: Colors.transparent,
+    //                 shape: BoxShape.circle,
+    //               ),
+    //               child: Center(
+    //                 child: Icon(
+    //                   Icons.navigation,
+    //                   color: AppColors.bikerrRedFill,
+    //                   size: 24.0,
+    //                 ),
+    //               ),
+    //             ),
+    //             markerSize: const Size(40, 40),
+    //             markerDirection: MarkerDirection.heading,
+    //             accuracyCircleColor: AppColors.markerBg1.withOpacity(0.3),
+    //             headingSectorColor: AppColors.markerBg1.withOpacity(0.7),
+    //             headingSectorRadius: 60,
+    //           ),
+    //           //  alignPositionOnUpdate: AlignOnUpdate.always,
+    //           alignPositionAnimationDuration:
+    //           const Duration(milliseconds: 500),
+    //           alignPositionAnimationCurve: Curves.easeOutCubic,
+    //           alignDirectionAnimationDuration:
+    //           const Duration(milliseconds: 300),
+    //           alignDirectionAnimationCurve: Curves.easeOut,
+    //         ),
+    //       ],
+    //     ),
+    //   ],
+    // );
   }
 }
 
