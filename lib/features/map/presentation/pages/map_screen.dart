@@ -21,6 +21,7 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+
   final MapBloc _mapBloc = sl();
   final MapController _mapController = MapController();
 
@@ -32,6 +33,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedTraccarDevice = 'This Device';
     // Dispatch event to get initial location and start tracking
     _mapBloc.add(GetInitialLocation());
     // New: Start Traccar WebSocket connection
@@ -82,51 +84,113 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-
-
   Widget _buildTraccarDropDown() {
-    return BlocBuilder<MapBloc, MapState>(
-      builder: (context, state) {
-        if (!_blocEventDispatched && state.postApiStatus != PostApiStatus.loading) {
-          _blocEventDispatched = true;
-          BlocProvider.of<MapBloc>(context).add(GetUserTraccarDevices());
-        }
-        if (state.postApiStatus == PostApiStatus.loading && state.traccarDevices == null) {
-          return CircularProgressIndicator(); // Show loading indicator
-        } else if (state.postApiStatus == PostApiStatus.error) {
-          return Text('Error: ${state.errorMessage}'); // Show error message
-        } else if (state.traccarDevices != null && state.traccarDevices!.isNotEmpty) {
-          return DropdownButtonHideUnderline( // Hides the default underline
-            child: DropdownButton<String>(
-              value: _selectedTraccarDevice,
-              isExpanded: true, // Make dropdown take full available width
-              dropdownColor: AppColors.markerBg1, // Background color of the dropdown menu
-              style: const TextStyle(color: Colors.white, fontSize: 16.0, fontWeight: FontWeight.bold),
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.white), // Custom icon
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedTraccarDevice = newValue;
-                });
-                // You can dispatch an event here to fetch specific data for the selected device
-              },
-              items: state.traccarDevices!.map<DropdownMenuItem<String>>((Device device) {
+    print("Building dropdown (updated)");
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 0.0),
+      decoration: BoxDecoration(
+        color: AppColors.markerBg1.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      width: MediaQuery.of(context).size.width * 0.45,
+      child: BlocBuilder<MapBloc, MapState>( // <--- BlocBuilder added here
+        builder: (context, state) {
+          // Dispatch event only if not already dispatched AND not currently loading
+          if (!_blocEventDispatched && state.postApiStatus != PostApiStatus.loading) {
+            _blocEventDispatched = true; // Set the flag to true to prevent continuous dispatch
+            BlocProvider.of<MapBloc>(context).add(GetUserTraccarDevices());
+          }
+
+          List<DropdownMenuItem<String>> dropdownItems = [
+            const DropdownMenuItem<String>(
+              value: 'This Device',
+              child: Text(
+                'This Device',
+                style: TextStyle(color: Colors.white),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ];
+
+          if (state.postApiStatus == PostApiStatus.success &&
+              state.traccarDevices != null &&
+              state.traccarDevices!.isNotEmpty) {
+            dropdownItems.addAll(
+              state.traccarDevices!.map<DropdownMenuItem<String>>((Device device) {
                 return DropdownMenuItem<String>(
                   value: device.name.toString(),
                   child: Text(
-                    device.name.toString(),
-                    style: const TextStyle(color: Colors.white), // Text color for items
+                    "${device.name.toString()}  ${device.status} ",
+                    style: const TextStyle(color: Colors.white),
                     overflow: TextOverflow.ellipsis,
                   ),
                 );
               }).toList(),
+            );
+          }
+
+          String? currentSelection = _selectedTraccarDevice;
+          if (currentSelection == null || !dropdownItems.any((item) => item.value == currentSelection)) {
+            currentSelection = 'This Device';
+          }
+
+          Widget dropdownContent = DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: currentSelection,
+              isExpanded: true,
+              dropdownColor: AppColors.markerBg1,
+              style: const TextStyle(color: Colors.white, fontSize: 16.0, fontWeight: FontWeight.bold),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+              onChanged: (String? newValue) {
+                setState(() {
+                  _selectedTraccarDevice = newValue;
+                });
+                print("Selected device: $_selectedTraccarDevice");
+              },
+              items: dropdownItems,
             ),
           );
-        } else {
-          return Text('No Traccar devices found.'); // No devices
-        }
-      },
+
+          // Conditional rendering for loading/error
+          List<Widget> columnChildren = [
+            if (state.postApiStatus == PostApiStatus.loading)
+              Row(
+                children: [
+                  Expanded(child: dropdownContent),
+                  const SizedBox(width: 8),
+                  const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ],
+              )
+            else if (state.postApiStatus == PostApiStatus.error)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  dropdownContent,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0), // Smaller padding
+                    child: Text(
+                      'Error: ${state.errorMessage ?? "Unknown error"}',
+                      style: const TextStyle(color: Colors.red, fontSize: 12.0),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
+            else // success or initial state
+              dropdownContent,
+
+          ];
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: columnChildren,
+          );
+        },
+      ),
     );
   }
+
 
 
   _buildMapContent(state ) {
@@ -185,7 +249,14 @@ class _MapScreenState extends State<MapScreen> {
         Positioned(
           top: 10.0,
           left: 10.0,
-          child: _buildTraccarDropDown(),
+          // Wrap _buildTraccarDropDown() with a colored container for debugging
+          child: Container(
+            color: Colors.yellow.withOpacity(0.5), // A highly visible color
+            // You might need to give it a size here if the dropdown still doesn't show
+            // width: 200, // Example size
+            // height: 50, // Example size
+            child: _buildTraccarDropDown(),
+          ),
         ),
       ],
     );

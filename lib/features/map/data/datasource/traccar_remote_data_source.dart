@@ -17,6 +17,7 @@ class TraccarRemoteDataSource extends TraccarDataSource {
   
   @override
   Future<List<Device>?> getUserDevices() async {
+    await Traccar.loadSessionCookieAndBearerToken();
     final devicesList = await Traccar.getDevices();
     return devicesList;
   }

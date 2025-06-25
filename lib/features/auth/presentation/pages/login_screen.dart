@@ -49,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Center(
               child: Column(
                 children: [
-                  Image.asset('assets/images/logo_bikerr.png'),
+                 // Image.asset('assets/images/logo_bikerr.png'),
 
                   SizedBox(height: 20),
 

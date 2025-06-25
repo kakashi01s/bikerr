@@ -236,7 +236,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           print("User logged in successfully: ${user.id}");
           print("User traccar token: ${user.traccarToken}");
 
-         final traccarlogin =  await Traccar.loginWithToken(user.traccarToken!);
+         final traccarlogin =  await Traccar.loginWithToken(user.traccarToken!, user.traccarId);
 
          if(traccarlogin?.statusCode != 200 || traccarlogin == null){
            print("Error in Login with Traccar");

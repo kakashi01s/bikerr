@@ -31,13 +31,23 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   Future<void> _getUserDevices(GetUserTraccarDevices event, Emitter<MapState> emit) async {
     print("Getting traccar devices");
-    emit(state.copyWith(postApiStatus: PostApiStatus.loading));
+    emit(state.copyWith(postApiStatus: PostApiStatus.loading, errorMessage: null)); // Clear previous error message
 
-    final response = await traccarUseCase.getUserDevices();
-    print(" traccar devices");
-    emit(state.copyWith(postApiStatus: PostApiStatus
-    .success, traccarDevices: response));
+    try {
+      final response = await traccarUseCase.getUserDevices();
+      print("traccar devices: $response");
 
+      if (response != null && response.isNotEmpty) {
+        emit(state.copyWith(postApiStatus: PostApiStatus.success, traccarDevices: response));
+      } else {
+        // IMPORTANT CHANGE: Emit success with an empty list if no devices are found.
+        // This ensures the dropdown still builds with "This Device" option.
+        emit(state.copyWith(postApiStatus: PostApiStatus.success, traccarDevices: []));
+      }
+    } catch (e) {
+      print("Error getting traccar devices: $e");
+      emit(state.copyWith(postApiStatus: PostApiStatus.error, errorMessage: e.toString()));
+    }
   }
 
   Future<bool> _checkLocationPermission() async {
@@ -245,6 +255,4 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     Traccar.disconnectWebSocket(); // New: Ensure WebSocket is disconnected
     return super.close();
   }
-
-
 }
