@@ -6,6 +6,7 @@ import 'package:bikerr/utils/enums/enums.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:traccar_gennissi/traccar_gennissi.dart';
 
 import '../../../../services/session/session_manager.dart';
@@ -29,8 +30,56 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<StopTraccarWebSocket>(_onStopTraccarWebSocket);   // New: Handle WebSocket stop
     on<TraccarDataReceived>(_onTraccarDataReceived);     // New: Handle WebSocket data
     on<LocationTrackingError>(_onLocationTrackingError);
+    on<TraccarDeviceSelected>(_onTraccarDeviceSelected);
+    on<GetLastKnownLocationForDevice>(_onGetLastKnownLocationForDevice);
   }
 
+  Future<void> _onGetLastKnownLocationForDevice(
+      GetLastKnownLocationForDevice event,
+      Emitter<MapState> emit,
+      ) async {
+
+    try {
+      Device? device;
+      try {
+        device = state.traccarDevices?.firstWhere((d) => d.id == event.deviceId);
+      } catch (_) {
+        device = null;
+      }
+      print("Device ${device?.id}     Device from state ${event.deviceId}");
+      if (device == null || device.lastPositionId == null) {
+        print("[MapBloc] Device not found or lastPositionId is null.");
+        return;
+      }
+      print("Device Id ${device.id}");
+      print("PositionId Id ${device.lastPositionId}");
+      final positionModel = await Traccar.getPositionById(
+        device.lastPositionId.toString(),
+      );
+
+      if (positionModel != null) {
+        final coords = LatLng(positionModel.latitude!, positionModel.longitude!);
+
+        final updatedLocations = Map<int, LatLng>.from(state.traccarDeviceLocations)
+          ..[device.id!] = coords;
+        print("[MapBloc] Updated Positions ${updatedLocations}");
+        emit(state.copyWith(traccarDeviceLocations: updatedLocations));
+      } else {
+        print("[MapBloc] PositionModel was null.");
+      }
+    } catch (e) {
+      print("[MapBloc] Error fetching last known location: $e");
+    }
+  }
+
+
+
+  void _onTraccarDeviceSelected(
+      TraccarDeviceSelected event,
+      Emitter<MapState> emit,
+      ) {
+    emit(state.copyWith(selectedDeviceId: event.deviceId));
+  }
   Future<void> _getUserDevices(GetUserTraccarDevices event, Emitter<MapState> emit) async {
     print("Getting traccar devices");
     emit(state.copyWith(postApiStatus: PostApiStatus.loading, errorMessage: null)); // Clear previous error message
@@ -70,6 +119,9 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       // You might want to emit an error state here
       add(LocationTrackingError("Location permissions permanently denied. Please enable them in app settings."));
       return false;
+    }
+    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+      add(GetInitialLocation(fetchOnce: true));
     }
     // Permissions are granted, proceed
     print("Location permissions granted.");
@@ -140,10 +192,12 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       Emitter<MapState> emit,
       ) async {
     final fetchOnce = event.fetchOnce;
-    if (state.postApiStatus == PostApiStatus.loading) {
-      return;
-    }
+    final isPositionLoaded = state.position != null;
+    final isTracking = _positionStream != null;
 
+    if (isPositionLoaded && isTracking) {
+      return; // Already tracking, no need to reinitialize
+    }
     final hasPermission = await _checkLocationPermission(); // Check permissions first
     if (!hasPermission) {
       return; // Stop if permissions are not granted
@@ -200,35 +254,54 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     _positionStream = null;
   }
 
-  // New: WebSocket event handlers
   Future<void> _onStartTraccarWebSocket(
       StartTraccarWebSocket event,
       Emitter<MapState> emit,
       ) async {
     try {
-      final SessionManager sessionManager = SessionManager.instance;
-      // Ensure previous subscription is cancelled before starting a new one
+      // Cancel any previous subscription before starting a new one
       await _webSocketSubscription?.cancel();
+
       final stream = await Traccar.connectWebSocket();
 
-      stream?.listen(
-            (data)  {
-          add(TraccarDataReceived(data));
+      if (stream == null) {
+        emit(state.copyWith(
+          postApiStatus: PostApiStatus.error,
+          errorMessage: "WebSocket stream is null",
+        ));
+        print("Traccar WebSocket stream is null — cannot connect.");
+        return;
+      }
+
+      _webSocketSubscription = stream.listen(
+            (data) {
+          add(TraccarDataReceived(data)); // Dispatch event for each incoming message
         },
         onError: (error) {
           print("Traccar WebSocket Error: $error");
-          emit(state.copyWith(postApiStatus: PostApiStatus.error, errorMessage: "WebSocket Error: $error"));
+          emit(state.copyWith(
+            postApiStatus: PostApiStatus.error,
+            errorMessage: "WebSocket Error: $error",
+          ));
         },
         onDone: () {
-          print("Traccar WebSocket Closed");
+          print("WebSocket closed unexpectedly, attempting to reconnect...");
+          add(StartTraccarWebSocket()); // Simple retry
         },
+        cancelOnError: true, // Ensures stream is closed on error
       );
+
       print("Traccar WebSocket Connected and Listening");
-    } catch (e) {
+    } catch (e, stackTrace) {
       print("Error connecting to Traccar WebSocket: $e");
-      emit(state.copyWith(postApiStatus: PostApiStatus.error, errorMessage: "Failed to connect to WebSocket: $e"));
+      print(stackTrace);
+      emit(state.copyWith(
+        postApiStatus: PostApiStatus.error,
+        errorMessage: "Failed to connect to WebSocket: $e",
+      ));
     }
   }
+
 
   Future<void> _onStopTraccarWebSocket(
       StopTraccarWebSocket event,
@@ -248,6 +321,18 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     // For example, if 'data' is a Device, you can add it to a list of devices in the state.
     // The type of 'data' depends on what Traccar's WebSocket sends.
     print("[Map Bloc] Traccar WebSocket Data Received: ${event.data.toString()}");
+
+    if (event.data is Map && event.data['type'] == 'position') {
+      final int deviceId = event.data['deviceId'];
+      final double lat = event.data['latitude'];
+      final double lng = event.data['longitude'];
+
+      final updatedMap = Map<int, LatLng>.from(state.traccarDeviceLocations);
+      updatedMap[deviceId] = LatLng(lat, lng);
+
+      emit(state.copyWith(traccarDeviceLocations: updatedMap));
+    }
+
     emit(state.copyWith(webSocketData: event.data));
   }
 

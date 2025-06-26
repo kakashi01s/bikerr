@@ -51,3 +51,13 @@ class TraccarDataReceived extends MapEvent {
   @override
   List<Object?> get props => [data];
 }
+// handle device selection from bloc
+class TraccarDeviceSelected extends MapEvent {
+  final int? deviceId; // null = “This device”
+  const TraccarDeviceSelected(this.deviceId);
+}
+// handle event when location updates are empty for a traccar device
+class GetLastKnownLocationForDevice extends MapEvent {
+  final int deviceId;
+  GetLastKnownLocationForDevice(this.deviceId);
+}

@@ -45,7 +45,7 @@ class Device {
       uniqueId: json['uniqueId'],
       status: json['status'],
       disabled: json['disabled'],
-      lastPositionId: json['lastPositionId'],
+      lastPositionId: json['positionId'],
       groupId: json['groupId'],
       calendarsId: json['calendarsId'],
       phone: json['phone'],

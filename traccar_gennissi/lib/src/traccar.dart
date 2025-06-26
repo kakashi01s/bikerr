@@ -95,7 +95,7 @@ class Traccar {
                 print("[Traccar] WebSocket data received after controller closed. Ignoring.");
                 return; // Crucial check
               }
-          print("[Traccar] WebSocket data: $data");
+         // print("[Traccar] WebSocket data: $data");
           try {
             final decoded = json.decode(data);
             if (decoded.containsKey('devices')) {
@@ -233,20 +233,35 @@ class Traccar {
 
 
 
-  static Future<PositionModel?> getPositionById(String deviceId, String posId) async {
+  static Future<PositionModel?> getPositionById(String posId) async {
     await loadSessionCookieAndBearerToken();
+    final uri = Uri.parse('$serverURL/api/positions').replace(queryParameters: {'id': '$posId'});
+
     try {
-      final response = await http.get(
-        Uri.parse('$serverURL/api/positions/$posId'),
-        headers: defaultHeaders,
-      );
+
+      final response = await http.get(uri, headers: defaultHeaders);
+
+
       if (response.statusCode == 200) {
-        return PositionModel.fromJson(json.decode(response.body));
+        final data = json.decode(response.body);
+        print("getPositionById: data: $data");
+        if (data is List && data.isNotEmpty) {
+          final lastPosition = data.last;
+          if (lastPosition is Map<String, dynamic>) {
+            return PositionModel.fromJson(lastPosition);
+          } else {
+            print("getPositionById: Unexpected item format in list: $lastPosition");
+          }
+        } else {
+          print("getPositionById: No position data found or unexpected format");
+        }
+      } else {
+        print("getPositionById failed: ${response.statusCode}");
       }
-      print("getPositionById failed: ${response.statusCode}");
     } catch (e) {
       print("Error in getPositionById: $e");
     }
+
     return null;
   }
 

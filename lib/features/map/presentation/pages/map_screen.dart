@@ -9,9 +9,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
-import 'package:traccar_gennissi/traccar_gennissi.dart';
 import '../../../../utils/di/service_locator.dart';
 import '../../../../utils/enums/enums.dart';
+import '../widgets/marker_animation.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -20,7 +20,7 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver{
 
   final MapBloc _mapBloc = sl();
   final MapController _mapController = MapController();
@@ -33,17 +33,27 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _selectedTraccarDevice = 'This Device';
     // Dispatch event to get initial location and start tracking
-    _mapBloc.add(GetInitialLocation());
+    _mapBloc.add(GetInitialLocation(fetchOnce: true));
     // New: Start Traccar WebSocket connection
     _mapBloc.add(StartTraccarWebSocket());
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Reconnect WebSocket when app is brought back to foreground
+      _mapBloc.add(StartTraccarWebSocket());
+    }
+  }
+
+  @override
   void dispose() {
     // New: Stop Traccar WebSocket connection
-   // _mapBloc.add(StopTraccarWebSocket());
+    WidgetsBinding.instance.removeObserver(this);
+   _mapBloc.add(StopTraccarWebSocket());
     super.dispose();
   }
 
@@ -53,138 +63,55 @@ class _MapScreenState extends State<MapScreen> {
 
 
 
-
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<MapBloc, MapState>(
-      builder: (context, state) {
-        // New: Print WebSocket data (for debugging/demonstration)
-        if (state.webSocketData != null) {
-          print("MapScreen received WebSocket Data: ${state.webSocketData.toString()}");
-          // Here you would typically parse the webSocketData and update map markers,
-          // device positions, etc. based on the type of data received.
-          // Example: if (state.webSocketData is PositionModel) { updateMarkerPosition(state.webSocketData); }
-        }
+    return BlocListener<MapBloc, MapState>(
+      listenWhen: (previous, current) {
+        final positionChanged =
+            previous.position != current.position && current.position != null;
 
-        return SafeArea(
-          child: Scaffold(
-            appBar:const CustomAppBar(),
-            body: Column(
-              children: [
-                ActionBar(onMessageTap: () {
-                  Navigator.pushNamed(context, RoutesName.conversationsScreen);
-                }),
-                Expanded(child: _buildMapContent(state))
-          
-              ],
-            )
-          ),
-        );
+        final selectedDevicePositionChanged = current.selectedDeviceId != null &&
+            previous.traccarDeviceLocations[current.selectedDeviceId] !=
+                current.traccarDeviceLocations[current.selectedDeviceId];
+
+        return positionChanged || selectedDevicePositionChanged;
       },
-    );
-  }
-
-  Widget _buildTraccarDropDown() {
-    print("Building dropdown (updated)");
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 0.0),
-      decoration: BoxDecoration(
-        color: AppColors.markerBg1.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      width: MediaQuery.of(context).size.width * 0.45,
-      child: BlocBuilder<MapBloc, MapState>( // <--- BlocBuilder added here
+      listener: (context, state) {
+        if (state.selectedDeviceId != null &&
+            state.traccarDeviceLocations[state.selectedDeviceId] != null) {
+          final devicePosition = state.traccarDeviceLocations[state.selectedDeviceId]!;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _mapController.move(devicePosition, 15.0);
+          });
+        } else if (state.position != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _mapController.move(
+              LatLng(state.position!.latitude, state.position!.longitude),
+              15.0,
+            );
+          });
+        }
+      },
+      child: BlocBuilder<MapBloc, MapState>(
         builder: (context, state) {
-          // Dispatch event only if not already dispatched AND not currently loading
-          if (!_blocEventDispatched && state.postApiStatus != PostApiStatus.loading) {
-            _blocEventDispatched = true; // Set the flag to true to prevent continuous dispatch
-            BlocProvider.of<MapBloc>(context).add(GetUserTraccarDevices());
+          if (state.webSocketData != null) {
+            print("MapScreen received WebSocket Data: ${state.webSocketData}");
           }
 
-          List<DropdownMenuItem<String>> dropdownItems = [
-            const DropdownMenuItem<String>(
-              value: 'This Device',
-              child: Text(
-                'This Device',
-                style: TextStyle(color: Colors.white),
-                overflow: TextOverflow.ellipsis,
+          return SafeArea(
+            child: Scaffold(
+              appBar: const CustomAppBar(),
+              body: Column(
+                children: [
+                  ActionBar(
+                    onMessageTap: () {
+                      Navigator.pushNamed(context, RoutesName.conversationsScreen);
+                    },
+                  ),
+                  Expanded(child: _buildMapContent(state)),
+                ],
               ),
             ),
-          ];
-
-          if (state.postApiStatus == PostApiStatus.success &&
-              state.traccarDevices != null &&
-              state.traccarDevices!.isNotEmpty) {
-            dropdownItems.addAll(
-              state.traccarDevices!.map<DropdownMenuItem<String>>((Device device) {
-                return DropdownMenuItem<String>(
-                  value: device.name.toString(),
-                  child: Text(
-                    "${device.name.toString()}  ${device.status} ",
-                    style: const TextStyle(color: Colors.white),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }).toList(),
-            );
-          }
-
-          String? currentSelection = _selectedTraccarDevice;
-          if (currentSelection == null || !dropdownItems.any((item) => item.value == currentSelection)) {
-            currentSelection = 'This Device';
-          }
-
-          Widget dropdownContent = DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: currentSelection,
-              isExpanded: true,
-              dropdownColor: AppColors.markerBg1,
-              style: const TextStyle(color: Colors.white, fontSize: 16.0, fontWeight: FontWeight.bold),
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedTraccarDevice = newValue;
-                });
-                print("Selected device: $_selectedTraccarDevice");
-              },
-              items: dropdownItems,
-            ),
-          );
-
-          // Conditional rendering for loading/error
-          List<Widget> columnChildren = [
-            if (state.postApiStatus == PostApiStatus.loading)
-              Row(
-                children: [
-                  Expanded(child: dropdownContent),
-                  const SizedBox(width: 8),
-                  const CircularProgressIndicator(strokeWidth: 1, color: Colors.white, constraints: BoxConstraints(maxWidth: 2, maxHeight: 2),),
-                ],
-              )
-            else if (state.postApiStatus == PostApiStatus.error)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  dropdownContent,
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0), // Smaller padding
-                    child: Text(
-                      'Error: ${state.errorMessage ?? "Unknown error"}',
-                      style: const TextStyle(color: Colors.red, fontSize: 12.0),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              )
-            else // success or initial state
-              dropdownContent,
-
-          ];
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: columnChildren,
           );
         },
       ),
@@ -193,19 +120,20 @@ class _MapScreenState extends State<MapScreen> {
 
 
 
-  _buildMapContent(state ) {
-    return
 
-      // _selectedTraccarDevice == "This Device" ?
 
-    Stack(
+
+
+  Widget _buildMapContent(MapState state) {
+    if (state.selectedDeviceId != null) {
+      print("UI LatLng for ${state.selectedDeviceId}: ${state.traccarDeviceLocations[state.selectedDeviceId]}");
+    }
+    return Stack(
       children: [
         FlutterMap(
           mapController: _mapController,
           options: MapOptions(
-            initialCenter: state.position != null
-                ? LatLng(state.position!.latitude, state.position!.longitude)
-                : LatLng(24.5854, 73.7125), // Default to Udaipur if no position
+            initialCenter: LatLng(24.5854, 73.7125), // Default to Udaipur
             initialZoom: 15.0,
             maxZoom: 18.0,
             minZoom: 3.0,
@@ -213,16 +141,16 @@ class _MapScreenState extends State<MapScreen> {
           children: [
             TileLayer(
               urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              // subdomains: ['a', 'b', 'c'],
             ),
+
+            // Optional: Device-based tracking (can be removed if you prefer only BLoC-based location)
             CurrentLocationLayer(
               alignPositionOnUpdate: AlignOnUpdate.always,
               alignDirectionOnUpdate: AlignOnUpdate.always,
-              // followOnLocationUpdate: FollowOnLocationUpdate.always,
               style: LocationMarkerStyle(
                 showAccuracyCircle: true,
                 marker: Container(
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
                   ),
@@ -240,88 +168,194 @@ class _MapScreenState extends State<MapScreen> {
                 headingSectorColor: AppColors.markerBg1.withOpacity(0.7),
                 headingSectorRadius: 60,
               ),
-              //  alignPositionOnUpdate: AlignOnUpdate.always,
-              alignPositionAnimationDuration:
-              const Duration(milliseconds: 500),
+              alignPositionAnimationDuration: const Duration(milliseconds: 500),
               alignPositionAnimationCurve: Curves.easeOutCubic,
-              alignDirectionAnimationDuration:
-              const Duration(milliseconds: 300),
+              alignDirectionAnimationDuration: const Duration(milliseconds: 300),
               alignDirectionAnimationCurve: Curves.easeOut,
             ),
+
+            // BLoC-driven marker (updates after permission is granted and position is fetched)
+            if (state.position != null)
+              MarkerLayer(
+                markers: [
+                  if (state.selectedDeviceId == null && state.position != null)
+                    Marker(
+                      point: LatLng(
+                        state.position!.latitude,
+                        state.position!.longitude,
+                      ),
+                      width: 40,
+                      height: 40,
+                      child: AnimatedRotatingMarker(
+                        targetPosition: LatLng(
+                          state.position!.latitude,
+                          state.position!.longitude,
+                        ),
+                        heading: state.position!.heading,
+                      ),
+                    ),
+
+                  if (state.selectedDeviceId != null &&
+                      state.traccarDeviceLocations.containsKey(state.selectedDeviceId))
+                    Marker(
+                      point: state.traccarDeviceLocations[state.selectedDeviceId]!,
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        Icons.location_on,
+                        color: state.selectedDeviceId != null ? Colors.green : Colors.blueAccent,
+                        size: 32,
+                      ),
+                    ),
+                ],
+              ),
           ],
         ),
+
+        // Dropdown
         Positioned(
           top: 10.0,
           left: 10.0,
-          // Wrap _buildTraccarDropDown() with a colored container for debugging
           child: Container(
-            color: Colors.yellow.withOpacity(0.5), // A highly visible color
-            // You might need to give it a size here if the dropdown still doesn't show
-            // width: 200, // Example size
-            // height: 50, // Example size
+            color: Colors.yellow.withOpacity(0.5),
             child: _buildTraccarDropDown(),
           ),
         ),
       ],
     );
-
-        //:
-
-    // Stack(
-    //   children: [
-    //     FlutterMap(
-    //       mapController: _mapController,
-    //       options: MapOptions(
-    //         initialCenter: state.position != null
-    //             ? LatLng(state.position!.latitude, state.position!.longitude)
-    //             : LatLng(24.5854, 73.7125), // Default to Udaipur if no position
-    //         initialZoom: 15.0,
-    //         maxZoom: 18.0,
-    //         minZoom: 3.0,
-    //       ),
-    //       children: [
-    //         TileLayer(
-    //           urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    //           // subdomains: ['a', 'b', 'c'],
-    //         ),
-    //         CurrentLocationLayer(
-    //           alignPositionOnUpdate: AlignOnUpdate.always,
-    //           alignDirectionOnUpdate: AlignOnUpdate.always,
-    //           // followOnLocationUpdate: FollowOnLocationUpdate.always,
-    //           style: LocationMarkerStyle(
-    //             showAccuracyCircle: true,
-    //             marker: Container(
-    //               decoration: BoxDecoration(
-    //                 color: Colors.transparent,
-    //                 shape: BoxShape.circle,
-    //               ),
-    //               child: Center(
-    //                 child: Icon(
-    //                   Icons.navigation,
-    //                   color: AppColors.bikerrRedFill,
-    //                   size: 24.0,
-    //                 ),
-    //               ),
-    //             ),
-    //             markerSize: const Size(40, 40),
-    //             markerDirection: MarkerDirection.heading,
-    //             accuracyCircleColor: AppColors.markerBg1.withOpacity(0.3),
-    //             headingSectorColor: AppColors.markerBg1.withOpacity(0.7),
-    //             headingSectorRadius: 60,
-    //           ),
-    //           //  alignPositionOnUpdate: AlignOnUpdate.always,
-    //           alignPositionAnimationDuration:
-    //           const Duration(milliseconds: 500),
-    //           alignPositionAnimationCurve: Curves.easeOutCubic,
-    //           alignDirectionAnimationDuration:
-    //           const Duration(milliseconds: 300),
-    //           alignDirectionAnimationCurve: Curves.easeOut,
-    //         ),
-    //       ],
-    //     ),
-    //   ],
-    // );
   }
+
+
+
+  Widget _buildTraccarDropDown() {
+    print("Building dropdown (updated)");
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 0.0),
+      decoration: BoxDecoration(
+        color: AppColors.markerBg1.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      width: MediaQuery.of(context).size.width * 0.45,
+      child: BlocBuilder<MapBloc, MapState>(
+        builder: (context, state) {
+          if (!_blocEventDispatched && state.postApiStatus != PostApiStatus.loading) {
+            _blocEventDispatched = true;
+            BlocProvider.of<MapBloc>(context).add(GetUserTraccarDevices());
+          }
+
+          // Store a mapping from device name to ID
+          final Map<String, int?> deviceNameToId = {
+            'This Device': null,
+          };
+
+          // Create the dropdown items
+          List<DropdownMenuItem<String>> dropdownItems = [
+            const DropdownMenuItem<String>(
+              value: 'This Device',
+              child: Text(
+                'This Device',
+                style: TextStyle(color: Colors.white),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ];
+
+          if (state.postApiStatus == PostApiStatus.success &&
+              state.traccarDevices != null &&
+              state.traccarDevices!.isNotEmpty) {
+            for (var device in state.traccarDevices!) {
+              final name = device.name.toString();
+              deviceNameToId[name] = device.id;
+              dropdownItems.add(
+                DropdownMenuItem<String>(
+                  value: name,
+                  child: Text(
+                    "$name  ${device.status}",
+                    style: const TextStyle(color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              );
+            }
+          }
+
+          String? currentSelection = _selectedTraccarDevice;
+          if (currentSelection == null || !dropdownItems.any((item) => item.value == currentSelection)) {
+            currentSelection = 'This Device';
+          }
+
+          Widget dropdownContent = DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: currentSelection,
+              isExpanded: true,
+              dropdownColor: AppColors.markerBg1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16.0,
+                fontWeight: FontWeight.bold,
+              ),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+              onChanged: (String? newValue) {
+                setState(() {
+                  _selectedTraccarDevice = newValue;
+                });
+                print("Selected device: $_selectedTraccarDevice");
+
+                final selectedDeviceId = deviceNameToId[newValue];
+                context.read<MapBloc>().add(TraccarDeviceSelected(selectedDeviceId));
+
+                if (selectedDeviceId != null &&
+                    !state.traccarDeviceLocations.containsKey(selectedDeviceId)) {
+                  context.read<MapBloc>().add(GetLastKnownLocationForDevice(selectedDeviceId));
+                }
+              },
+              items: dropdownItems,
+            ),
+          );
+
+          List<Widget> columnChildren = [
+            if (state.postApiStatus == PostApiStatus.loading)
+              Row(
+                children: [
+                  Expanded(child: dropdownContent),
+                  const SizedBox(width: 8),
+                  const CircularProgressIndicator(
+                    strokeWidth: 1,
+                    color: Colors.white,
+                    constraints: BoxConstraints(maxWidth: 2, maxHeight: 2),
+                  ),
+                ],
+              )
+            else if (state.postApiStatus == PostApiStatus.error)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  dropdownContent,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      'Error: ${state.errorMessage ?? "Unknown error"}',
+                      style: const TextStyle(color: Colors.red, fontSize: 12.0),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
+            else
+              dropdownContent,
+          ];
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: columnChildren,
+          );
+        },
+      ),
+    );
+  }
+
 }
 
 
