@@ -7,11 +7,11 @@ import '../../../../core/theme.dart';
 class AnimatedRotatingMarker extends StatefulWidget {
   final LatLng targetPosition;
   final double heading;
-
+  final Color color;
   const AnimatedRotatingMarker({
     super.key,
     required this.targetPosition,
-    required this.heading,
+    required this.heading, required this.color,
   });
 
   @override

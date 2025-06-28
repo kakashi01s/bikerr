@@ -139,7 +139,7 @@ Future<void> init() async {
       refreshTokenUsecase: sl(),
     ),
   );
-  sl.registerFactory(() => MapBloc(getCurrentLocationUsecase: sl(), traccarUseCase: sl()));
+  sl.registerFactory(() => MapBloc(sl()));
   sl.registerFactory(
     () => ChatBloc(
       sl(),

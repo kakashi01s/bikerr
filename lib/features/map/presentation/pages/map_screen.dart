@@ -8,10 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
-import '../../../../utils/di/service_locator.dart';
+import 'package:traccar_gennissi/traccar_gennissi.dart';
+import 'package:tuple/tuple.dart';
 import '../../../../utils/enums/enums.dart';
 import '../widgets/marker_animation.dart';
+import 'package:geolocator/geolocator.dart'; // Assuming this is the Position source
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -20,120 +21,123 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver{
-
-  final MapBloc _mapBloc = sl();
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final MapController _mapController = MapController();
-
-  String? _selectedTraccarDevice;
-
-  // Add a flag to ensure the Bloc event is dispatched only once for Traccar devices
-  bool _blocEventDispatched = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _selectedTraccarDevice = 'This Device';
-    // Dispatch event to get initial location and start tracking
-    _mapBloc.add(GetInitialLocation(fetchOnce: true));
-    // New: Start Traccar WebSocket connection
-    _mapBloc.add(StartTraccarWebSocket());
+    // Dispatch initial event to get location and start the socket
+    context.read<MapBloc>().add(GetInitialLocation(fetchOnce: true));
+    context.read<MapBloc>().add(StartTraccarWebSocket());
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Reconnect WebSocket when app is brought back to foreground
-      _mapBloc.add(StartTraccarWebSocket());
+      context.read<MapBloc>().add(StartTraccarWebSocket());
+    } else if (state == AppLifecycleState.paused) {
+      context.read<MapBloc>().add(StopTraccarWebSocket());
     }
   }
 
   @override
   void dispose() {
-    // New: Stop Traccar WebSocket connection
     WidgetsBinding.instance.removeObserver(this);
-   _mapBloc.add(StopTraccarWebSocket());
+    _mapController.dispose();
     super.dispose();
   }
 
-
-
-
-
-
-
   @override
   Widget build(BuildContext context) {
-    return BlocListener<MapBloc, MapState>(
-      listenWhen: (previous, current) {
-        final positionChanged =
-            previous.position != current.position && current.position != null;
-
-        final selectedDevicePositionChanged = current.selectedDeviceId != null &&
-            previous.traccarDeviceLocations[current.selectedDeviceId] !=
-                current.traccarDeviceLocations[current.selectedDeviceId];
-
-        return positionChanged || selectedDevicePositionChanged;
-      },
-      listener: (context, state) {
-        if (state.selectedDeviceId != null &&
-            state.traccarDeviceLocations[state.selectedDeviceId] != null) {
-          final devicePosition = state.traccarDeviceLocations[state.selectedDeviceId]!;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _mapController.move(devicePosition, 15.0);
-          });
-        } else if (state.position != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _mapController.move(
-              LatLng(state.position!.latitude, state.position!.longitude),
-              15.0,
-            );
-          });
-        }
-      },
-      child: BlocBuilder<MapBloc, MapState>(
-        builder: (context, state) {
-          if (state.webSocketData != null) {
-            print("MapScreen received WebSocket Data: ${state.webSocketData}");
-          }
-
-          return SafeArea(
-            child: Scaffold(
-              appBar: const CustomAppBar(),
-              body: Column(
-                children: [
-                  ActionBar(
-                    onMessageTap: () {
-                      Navigator.pushNamed(context, RoutesName.conversationsScreen);
-                    },
-                  ),
-                  Expanded(child: _buildMapContent(state)),
-                ],
+    return SafeArea(
+      child: Scaffold(
+        appBar: const CustomAppBar(),
+        body: Column(
+          children: [
+            ActionBar(
+              onMessageTap: () {
+                Navigator.pushNamed(context, RoutesName.conversationsScreen);
+              },
+            ),
+            Expanded(
+              child: BlocConsumer<MapBloc, MapState>(
+                listenWhen: (previous, current) => _shouldMoveMap(previous, current),
+                listener: (context, state) {
+                  if (state is MapLoaded) {
+                    _moveMapToSelectedDevice(state);
+                  }
+                },
+                builder: (context, state) {
+                  return switch (state) {
+                    MapInitial() => const Center(child: Text('Initializing Map...')),
+                    MapLoading() => const Center(child: CircularProgressIndicator()),
+                    MapError(message: final msg) => Center(child: Text('Error: $msg')),
+                    MapLoaded() => _buildMapContent(context, state),
+                  };
+                },
               ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
 
+  bool _shouldMoveMap(MapState previous, MapState current) {
+    if (current is! MapLoaded) return false;
+    // If the previous state wasn't loaded, we definitely want to move
+    if (previous is! MapLoaded) return true;
 
-
-
-
-
-
-  Widget _buildMapContent(MapState state) {
-    if (state.selectedDeviceId != null) {
-      print("UI LatLng for ${state.selectedDeviceId}: ${state.traccarDeviceLocations[state.selectedDeviceId]}");
+    // Move if the selected device ID changes
+    if (previous.selectedDeviceId != current.selectedDeviceId) {
+      return true;
     }
+
+    // Move if 'This Device' is selected and its position has updated
+    if (current.selectedDeviceId == null && previous.currentDevicePosition != current.currentDevicePosition) {
+      return true;
+    }
+
+    // Move if a Traccar device is selected and its location has updated
+    if (current.selectedDeviceId != null &&
+        previous.traccarDeviceLocations[current.selectedDeviceId] != current.traccarDeviceLocations[current.selectedDeviceId]) {
+      return true;
+    }
+
+    return false;
+  }
+
+  void _moveMapToSelectedDevice(MapLoaded state) {
+    LatLng? targetLatLng;
+
+    if (state.selectedDeviceId == null) {
+      // 'This Device' is selected
+      final pos = state.currentDevicePosition;
+      if (pos != null) {
+        targetLatLng = LatLng(pos.latitude, pos.longitude);
+      }
+    } else {
+      // A Traccar device is selected
+      targetLatLng = state.traccarDeviceLocations[state.selectedDeviceId!];
+    }
+
+    if (targetLatLng != null) {
+      _mapController.move(targetLatLng, _mapController.camera.zoom);
+    }
+  }
+
+  Widget _buildMapContent(BuildContext context, MapLoaded state) {
     return Stack(
       children: [
         FlutterMap(
           mapController: _mapController,
           options: MapOptions(
-            initialCenter: LatLng(24.5854, 73.7125), // Default to Udaipur
+            initialCenter: LatLng(
+              state.currentDevicePosition?.latitude ?? 24.5854,
+              state.currentDevicePosition?.longitude ?? 73.7125,
+            ),
             initialZoom: 15.0,
             maxZoom: 18.0,
             minZoom: 3.0,
@@ -142,221 +146,128 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver{
             TileLayer(
               urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
             ),
-
-            // Optional: Device-based tracking (can be removed if you prefer only BLoC-based location)
-            CurrentLocationLayer(
-              alignPositionOnUpdate: AlignOnUpdate.always,
-              alignDirectionOnUpdate: AlignOnUpdate.always,
-              style: LocationMarkerStyle(
-                showAccuracyCircle: true,
-                marker: Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.transparent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Icon(
-                      Icons.navigation,
-                      color: AppColors.bikerrRedFill,
-                      size: 24.0,
-                    ),
-                  ),
-                ),
-                markerSize: const Size(40, 40),
-                markerDirection: MarkerDirection.heading,
-                accuracyCircleColor: AppColors.markerBg1.withOpacity(0.3),
-                headingSectorColor: AppColors.markerBg1.withOpacity(0.7),
-                headingSectorRadius: 60,
-              ),
-              alignPositionAnimationDuration: const Duration(milliseconds: 500),
-              alignPositionAnimationCurve: Curves.easeOutCubic,
-              alignDirectionAnimationDuration: const Duration(milliseconds: 300),
-              alignDirectionAnimationCurve: Curves.easeOut,
+            MarkerLayer(
+              markers: _buildMarkers(state),
             ),
-
-            // BLoC-driven marker (updates after permission is granted and position is fetched)
-            if (state.position != null)
-              MarkerLayer(
-                markers: [
-                  if (state.selectedDeviceId == null && state.position != null)
-                    Marker(
-                      point: LatLng(
-                        state.position!.latitude,
-                        state.position!.longitude,
-                      ),
-                      width: 40,
-                      height: 40,
-                      child: AnimatedRotatingMarker(
-                        targetPosition: LatLng(
-                          state.position!.latitude,
-                          state.position!.longitude,
-                        ),
-                        heading: state.position!.heading,
-                      ),
-                    ),
-
-                  if (state.selectedDeviceId != null &&
-                      state.traccarDeviceLocations.containsKey(state.selectedDeviceId))
-                    Marker(
-                      point: state.traccarDeviceLocations[state.selectedDeviceId]!,
-                      width: 40,
-                      height: 40,
-                      child: Icon(
-                        Icons.location_on,
-                        color: state.selectedDeviceId != null ? Colors.green : Colors.blueAccent,
-                        size: 32,
-                      ),
-                    ),
-                ],
-              ),
           ],
         ),
-
-        // Dropdown
         Positioned(
           top: 10.0,
           left: 10.0,
-          child: Container(
-            color: Colors.yellow.withOpacity(0.5),
-            child: _buildTraccarDropDown(),
-          ),
+          right: 10.0,
+          child: _buildTraccarDropDown(),
         ),
       ],
     );
   }
 
+  List<Marker> _buildMarkers(MapLoaded state) {
+    final List<Marker> markers = [];
+    LatLng? positionToShow;
 
+    if (state.selectedDeviceId == null) {
+      // Show 'This Device' location
+      final pos = state.currentDevicePosition;
+      if (pos != null) {
+        positionToShow = LatLng(pos.latitude, pos.longitude);
+        markers.add(
+          Marker(
+            width: 50,
+            height: 50,
+            point: positionToShow,
+            child: const Icon(Icons.my_location, color: Colors.blue, size: 35),
+          ),
+        );
+      }
+    } else {
+      // Show selected Traccar device location
+      positionToShow = state.traccarDeviceLocations[state.selectedDeviceId!];
+      if (positionToShow != null) {
+        markers.add(
+          Marker(
+            width: 80,
+            height: 80,
+            point: positionToShow,
+            // Consider using a different marker for Traccar devices
+            child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+          ),
+        );
+      }
+    }
+    return markers;
+  }
 
   Widget _buildTraccarDropDown() {
-    print("Building dropdown (updated)");
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 0.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
       decoration: BoxDecoration(
-        color: AppColors.markerBg1.withOpacity(0.8),
+        color: Colors.black.withOpacity(0.7),
         borderRadius: BorderRadius.circular(8.0),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
-      width: MediaQuery.of(context).size.width * 0.45,
       child: BlocBuilder<MapBloc, MapState>(
+        // Use a builder as we only need to rebuild the dropdown UI
         builder: (context, state) {
-          if (!_blocEventDispatched && state.postApiStatus != PostApiStatus.loading) {
-            _blocEventDispatched = true;
-            BlocProvider.of<MapBloc>(context).add(GetUserTraccarDevices());
+          if (state is! MapLoaded) {
+            // Show a disabled or loading state for the dropdown
+            return const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Loading Devices...', style: TextStyle(color: Colors.white)),
+                SizedBox(width: 10),
+                SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+              ],
+            );
           }
 
-          // Store a mapping from device name to ID
-          final Map<String, int?> deviceNameToId = {
-            'This Device': null,
+          final devices = state.traccarDevices;
+          final selectedDeviceId = state.selectedDeviceId;
+
+          final Map<int?, String> deviceIdToName = {
+            null: 'This Device',
+            for (var device in devices) device.id!: device.name!,
           };
 
-          // Create the dropdown items
-          List<DropdownMenuItem<String>> dropdownItems = [
-            const DropdownMenuItem<String>(
-              value: 'This Device',
-              child: Text(
-                'This Device',
-                style: TextStyle(color: Colors.white),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ];
-
-          if (state.postApiStatus == PostApiStatus.success &&
-              state.traccarDevices != null &&
-              state.traccarDevices!.isNotEmpty) {
-            for (var device in state.traccarDevices!) {
-              final name = device.name.toString();
-              deviceNameToId[name] = device.id;
-              dropdownItems.add(
-                DropdownMenuItem<String>(
-                  value: name,
-                  child: Text(
-                    "$name  ${device.status}",
-                    style: const TextStyle(color: Colors.white),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              );
-            }
-          }
-
-          String? currentSelection = _selectedTraccarDevice;
-          if (currentSelection == null || !dropdownItems.any((item) => item.value == currentSelection)) {
-            currentSelection = 'This Device';
-          }
-
-          Widget dropdownContent = DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: currentSelection,
+          return DropdownButtonHideUnderline(
+            child: DropdownButton<int?>(
+              value: selectedDeviceId,
               isExpanded: true,
-              dropdownColor: AppColors.markerBg1,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16.0,
-                fontWeight: FontWeight.bold,
-              ),
+              dropdownColor: Colors.black.withOpacity(0.85),
+              style: const TextStyle(color: Colors.white, fontSize: 16.0),
               icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedTraccarDevice = newValue;
-                });
-                print("Selected device: $_selectedTraccarDevice");
+              onChanged: (int? newSelectedDeviceId) {
+                if (newSelectedDeviceId == selectedDeviceId) return;
 
-                final selectedDeviceId = deviceNameToId[newValue];
-                context.read<MapBloc>().add(TraccarDeviceSelected(selectedDeviceId));
+                context.read<MapBloc>().add(TraccarDeviceSelected(newSelectedDeviceId));
 
-                if (selectedDeviceId != null &&
-                    !state.traccarDeviceLocations.containsKey(selectedDeviceId)) {
-                  context.read<MapBloc>().add(GetLastKnownLocationForDevice(selectedDeviceId));
+                // If a traccar device is selected, ensure we have its location
+                if (newSelectedDeviceId != null && !state.traccarDeviceLocations.containsKey(newSelectedDeviceId)) {
+                  context.read<MapBloc>().add(GetLastKnownLocationForDevice(newSelectedDeviceId));
                 }
               },
-              items: dropdownItems,
+              items: deviceIdToName.entries.map((entry) {
+                return DropdownMenuItem<int?>(
+                  value: entry.key,
+                  child: Text(
+                    entry.value,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
             ),
-          );
-
-          List<Widget> columnChildren = [
-            if (state.postApiStatus == PostApiStatus.loading)
-              Row(
-                children: [
-                  Expanded(child: dropdownContent),
-                  const SizedBox(width: 8),
-                  const CircularProgressIndicator(
-                    strokeWidth: 1,
-                    color: Colors.white,
-                    constraints: BoxConstraints(maxWidth: 2, maxHeight: 2),
-                  ),
-                ],
-              )
-            else if (state.postApiStatus == PostApiStatus.error)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  dropdownContent,
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      'Error: ${state.errorMessage ?? "Unknown error"}',
-                      style: const TextStyle(color: Colors.red, fontSize: 12.0),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              )
-            else
-              dropdownContent,
-          ];
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: columnChildren,
           );
         },
       ),
     );
   }
-
 }
-
-
-
