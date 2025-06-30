@@ -41,19 +41,51 @@ class MapError extends MapState {
   List<Object?> get props => [message, previousState];
 }
 
+class LoadingDevices extends MapState {
+  final String message;
+  final MapLoaded? previousState;
+  const LoadingDevices({this.message = 'Loading Devices data...', this.previousState});
+  @override
+  List<Object?> get props => [message, previousState];
+}
+
+class TraccarDevicesLoaded extends MapState {
+  final List<Device> traccarDevices;
+  final MapLoaded? previousState; // <-- ADD THIS LINE
+
+  const TraccarDevicesLoaded({
+    this.traccarDevices = const [],
+    this.previousState, // <-- ADD THIS LINE
+  });
+
+  TraccarDevicesLoaded copyWith({
+    List<Device>? traccarDevices,
+    MapLoaded? previousState, // <-- ADD THIS LINE
+  }) {
+    return TraccarDevicesLoaded(
+      traccarDevices: traccarDevices ?? this.traccarDevices,
+      previousState: previousState ?? this.previousState, // <-- ADD THIS LINE
+    );
+  }
+
+  @override
+  List<Object?> get props => [traccarDevices, previousState]; // <-- UPDATE THIS LINE
+}
+
+
 // This is the core 'loaded' state that holds all your map-related data.
 class MapLoaded extends MapState {
   // 'This Device' location (nullable because it might not be available or selected)
+  final Map<int, PositionModel> traccarDevicePositions;
   final Position? currentDevicePosition;
-  final Map<int, LatLng> traccarDeviceLocations; // All known Traccar locations
-  final List<Device> traccarDevices; // All fetched Traccar devices
+  final PositionModel? traccarDeviceLastPosition; // All known Traccar locations
   final int? selectedDeviceId; // null means 'This Device' is selected
   final dynamic latestWebSocketRawData; // For debugging/displaying raw WebSocket data
 
   const MapLoaded({
+    this.traccarDevicePositions = const {},
     this.currentDevicePosition,
-    this.traccarDeviceLocations = const {},
-    this.traccarDevices = const [],
+    this.traccarDeviceLastPosition,
     this.selectedDeviceId,
     this.latestWebSocketRawData,
   });
@@ -62,10 +94,11 @@ class MapLoaded extends MapState {
   MapLoaded copyWith({
     // For nullable fields, we use the sentinel to detect if a value was passed.
     Object? currentDevicePosition = _copyWithDefault,
-    Map<int, LatLng>? traccarDeviceLocations,
-    List<Device>? traccarDevices,
+    Object? traccarDeviceLastPosition = _copyWithDefault,
+    Map<int, PositionModel>? traccarDevicePositions,
     Object? selectedDeviceId = _copyWithDefault,
     Object? latestWebSocketRawData = _copyWithDefault,
+
   }) {
     return MapLoaded(
       // If the passed value is the sentinel, keep the old value.
@@ -75,9 +108,9 @@ class MapLoaded extends MapState {
           : currentDevicePosition as Position?,
 
       // For non-nullable fields with defaults, the ?? operator is fine.
-      traccarDeviceLocations:
-      traccarDeviceLocations ?? this.traccarDeviceLocations,
-      traccarDevices: traccarDevices ?? this.traccarDevices,
+      traccarDeviceLastPosition:
+      traccarDeviceLastPosition == _copyWithDefault ? this.traccarDeviceLastPosition : traccarDeviceLastPosition as PositionModel?,
+      traccarDevicePositions: traccarDevicePositions ?? this.traccarDevicePositions,
 
       // Apply the sentinel check for the other nullable fields.
       selectedDeviceId: selectedDeviceId == _copyWithDefault
@@ -92,9 +125,9 @@ class MapLoaded extends MapState {
   @override
   List<Object?> get props => [
     currentDevicePosition,
-    traccarDeviceLocations,
-    traccarDevices,
+    traccarDeviceLastPosition,
     selectedDeviceId,
     latestWebSocketRawData,
+    traccarDevicePositions
   ];
 }

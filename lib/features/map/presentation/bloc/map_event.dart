@@ -56,9 +56,18 @@ class TraccarDeviceSelected extends MapEvent {
   List<Object?> get props => [deviceId];
 }
 
+
 class GetLastKnownLocationForDevice extends MapEvent {
   final int deviceId;
   const GetLastKnownLocationForDevice(this.deviceId);
   @override
   List<Object?> get props => [deviceId];
+}
+
+class DeleteDevice extends MapEvent {
+  final int deviceId;
+  const DeleteDevice(this.deviceId);
+  @override
+  List<Object?> get props => [deviceId];
+
 }

@@ -13,5 +13,6 @@ class RoutesName {
   static const String baseChatScreen = 'base_chat_screen';
   static const String joinChatScreen = 'join_chat_screen';
   static const String createChatGroupsScreen = 'create_chat_group_screen';
+  static const String geoFenceScreen = 'geo_fence_screen';
 
 }

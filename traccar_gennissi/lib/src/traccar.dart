@@ -538,6 +538,19 @@ class Traccar {
       print("Error deleting permission: $e");
       return false;
     }
+  }  static Future<bool> deleteDevice(int id) async {
+    await loadSessionCookieAndBearerToken();
+    try {
+      final response = await http.delete(
+        Uri.parse('$serverURL/api/devices/$id'),
+        headers: defaultHeaders
+
+      );
+      return response.statusCode == 204;
+    } catch (e) {
+      print("Error deleting device: $e");
+      return false;
+    }
   }
   static Future<String?> addGeofence(String geofenceJson) async {
     await loadSessionCookieAndBearerToken();

@@ -34,6 +34,8 @@ PODS:
     - GoogleUtilities/UserDefaults (~> 8.1)
     - nanopb (~> 3.30910.0)
   - Flutter (1.0.0)
+  - flutter_compass (0.0.1):
+    - Flutter
   - flutter_local_notifications (0.0.1):
     - Flutter
   - flutter_rotation_sensor (0.0.1):
@@ -100,6 +102,7 @@ DEPENDENCIES:
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - Flutter (from `Flutter`)
+  - flutter_compass (from `.symlinks/plugins/flutter_compass/ios`)
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - flutter_rotation_sensor (from `.symlinks/plugins/flutter_rotation_sensor/ios`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
@@ -134,6 +137,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/firebase_messaging/ios"
   Flutter:
     :path: Flutter
+  flutter_compass:
+    :path: ".symlinks/plugins/flutter_compass/ios"
   flutter_local_notifications:
     :path: ".symlinks/plugins/flutter_local_notifications/ios"
   flutter_rotation_sensor:
@@ -169,6 +174,7 @@ SPEC CHECKSUMS:
   FirebaseInstallations: 0ee9074f2c1e86561ace168ee1470dc67aabaf02
   FirebaseMessaging: 195bbdb73e6ca1dbc76cd46e73f3552c084ef6e4
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  flutter_compass: b236ab69b61545cce89fd58527f401a7587d5cc1
   flutter_local_notifications: a5a732f069baa862e728d839dd2ebb904737effb
   flutter_rotation_sensor: bf55ead3f64f27207dacc5972fe8ebe932f3de0b
   flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13

@@ -59,7 +59,10 @@ class BasePage extends StatelessWidget {
       },
       builder: (context, state) {
         return Scaffold(
-          body: Center(child: bottomNavScreen.elementAt(state.tabIndex)),
+         body: IndexedStack(
+          index: state.tabIndex,
+          children: bottomNavScreen,
+        ),
           bottomNavigationBar: BottomNavigationBar(
             backgroundColor: AppColors.bikerrbgColor,
             items: bottomNavItems,

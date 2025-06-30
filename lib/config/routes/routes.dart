@@ -15,6 +15,7 @@ import 'package:bikerr/features/conversations/presentation/pages/conversation_sc
 import 'package:bikerr/features/conversations/presentation/pages/create_new_conversations.dart';
 import 'package:bikerr/features/conversations/presentation/pages/join_new_conversations.dart';
 import 'package:bikerr/features/map/presentation/bloc/map_bloc.dart';
+import 'package:bikerr/features/map/presentation/pages/geo_fence_screen.dart';
 import 'package:bikerr/features/map/presentation/pages/map_screen.dart';
 import 'package:bikerr/utils/di/service_locator.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +35,11 @@ class Routes {
         );
       case RoutesName.splashScreen:
         return MaterialPageRoute(builder: (context) => const SplashScreen());
+       case RoutesName.geoFenceScreen:
+         final arguments = settings.arguments as Map<String, dynamic>?;
+         final position = arguments?['position'];
+
+        return MaterialPageRoute(builder: (context) => GeoFenceScreen(position: position));
       case RoutesName.mapScreen:
         return MaterialPageRoute(builder: (context) {
           return BlocProvider(

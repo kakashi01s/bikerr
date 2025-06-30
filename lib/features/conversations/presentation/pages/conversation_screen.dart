@@ -37,8 +37,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
           ConversationBloc
         >(); // Assuming ConversationBloc is registered in GetIt
 
-    // Dispatch initial fetch conversations event
-    // Assuming FetchAllConversationsEvent triggers the first page load
     _conversationBloc.add(FetchAllConversationsEvent());
 
     _searchController.addListener(() {
