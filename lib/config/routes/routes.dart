@@ -38,8 +38,12 @@ class Routes {
        case RoutesName.geoFenceScreen:
          final arguments = settings.arguments as Map<String, dynamic>?;
          final position = arguments?['position'];
+         final deviceId = arguments?['deviceId'];
 
-        return MaterialPageRoute(builder: (context) => GeoFenceScreen(position: position));
+        return MaterialPageRoute(builder: (context) => BlocProvider.value(
+            value: sl<MapBloc>(),
+            child: GeoFenceScreen(position: position, deviceId: deviceId, )
+        ));
       case RoutesName.mapScreen:
         return MaterialPageRoute(builder: (context) {
           return BlocProvider(

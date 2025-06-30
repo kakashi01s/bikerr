@@ -552,11 +552,11 @@ class Traccar {
       return false;
     }
   }
-  static Future<String?> addGeofence(String geofenceJson) async {
+  static Future<String?> addGeofence(String geofenceJson, String id) async {
     await loadSessionCookieAndBearerToken();
     try {
       final response = await http.post(
-        Uri.parse('$serverURL/api/geofences'),
+        Uri.parse('$serverURL/api/geofences/${id}'),
         headers: defaultHeaders,
         body: geofenceJson,
       );
@@ -615,9 +615,12 @@ class Traccar {
   static Future<List<GeofenceModel>?> getGeoFencesByDeviceID(String deviceId) async {
     await loadSessionCookieAndBearerToken();
     try {
-      final uri = Uri.parse('$serverURL/api/geofences?deviceId=$deviceId');
+      final uri = Uri.parse('$serverURL/api/geofences').replace(queryParameters: {
+        "deviceId": deviceId
+      });
       final response = await http.get(uri, headers: defaultHeaders);
       if (response.statusCode == 200) {
+        print("Geofences   ${response.body}");
         Iterable list = json.decode(response.body);
         return list.map((e) => GeofenceModel.fromJson(e)).toList();
       }
