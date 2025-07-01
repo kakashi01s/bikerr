@@ -512,18 +512,37 @@ class Traccar {
 
   static Future<bool> addPermission(String permissionJson) async {
     await loadSessionCookieAndBearerToken();
+
+    final headers = {
+      ...defaultHeaders,
+      'Content-Type': 'application/json; charset=utf-8',
+    };
+
+    print("[Traccar] Add Permission Body: $permissionJson");
+
     try {
       final response = await http.post(
         Uri.parse('$serverURL/api/permissions'),
-        headers: defaultHeaders,
+        headers: headers,
         body: permissionJson,
       );
-      return response.statusCode == 204;
-    } catch (e) {
+
+      print("[Traccar] AddPermission response.statusCode: ${response.statusCode}");
+      print("[Traccar] AddPermission response.body: ${response.body}");
+
+      if (response.statusCode == 204) {
+        return true;
+      } else {
+        print("AddPermission failed. Status: ${response.statusCode}, Body: ${response.body}");
+        return false;
+      }
+    } catch (e, stack) {
       print("Error adding permission: $e");
+      print(stack);
       return false;
     }
   }
+
 
   static Future<bool> deletePermission(String permissionJson) async {
     await loadSessionCookieAndBearerToken();
@@ -552,20 +571,39 @@ class Traccar {
       return false;
     }
   }
-  static Future<String?> addGeofence(String geofenceJson, String id) async {
+  static Future<String?> addGeofence(String geofenceJson,String deviceId) async {
     await loadSessionCookieAndBearerToken();
+
+    final headers = {
+      ...defaultHeaders,
+      'Content-Type': 'application/json; charset=utf-8',
+    };
+
+    print("[Traccar] Add Geofence Body: $geofenceJson");
+
     try {
       final response = await http.post(
-        Uri.parse('$serverURL/api/geofences/${id}'),
-        headers: defaultHeaders,
+        Uri.parse('$serverURL/api/geofences'),
+        headers: headers,
         body: geofenceJson,
       );
-      return response.statusCode == 200 ? response.body : null;
+
+      print("[Traccar] AddGeofence response.statusCode: ${response.statusCode}");
+      print("[Traccar] AddGeofence response.body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        return response.body;
+      } else {
+        print("AddGeofence failed. Status: ${response.statusCode}, Body: ${response.body}");
+        return null;
+      }
     } catch (e) {
       print("Error adding geofence: $e");
       return null;
     }
   }
+
+
 
   static Future<String?> updateGeofence(String geofenceJson, String id) async {
     await loadSessionCookieAndBearerToken();

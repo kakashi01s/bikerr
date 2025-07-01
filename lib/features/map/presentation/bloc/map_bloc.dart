@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:geolocator/geolocator.dart';
@@ -98,7 +99,6 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     if (s is DeleteTraccarDeviceLoaded) return s.previousState;
 
     print('[MapBoc]  state  ${s}');
-    // Add other states as needed...
     return const MapLoaded();
 
   }
@@ -335,42 +335,77 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   Future<void> _onSendTraccarCommand(SendTraccarCommand event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onAddTraccarPermission(AddTraccarPermission event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onDeleteTraccarPermission(DeleteTraccarPermission event, Emitter<MapState> emit) async { /* ... */ }
+
   Future<void> _onGetTraccarGeofencesByDeviceId(GetTraccarGeofencesByDeviceId event, Emitter<MapState> emit) async {
+
     final currentMapState = _getLoadedState();
     emit(GeofencesLoading(previousState: currentMapState));
+    print('[Mapstate] $currentMapState');
     try {
       final geofences = await Traccar.getGeoFencesByDeviceID(event.deviceId.toString()) ?? [];
-      if(geofences.isNotEmpty)
+      // Emit the loaded geofences. If none are found, this will correctly emit an empty list.
       emit(GeofencesLoaded(previousState: currentMapState, geofences: geofences));
-
-      emit(GeofencesLoaded(previousState: currentMapState,geofences:[]));
+      emit(currentMapState);
     } catch(e) {
-      print("Error while fetching Geofence");
-      emit(MapError(message: 'Failed to Load device: $e', previousState: currentMapState));
+      print("Error while fetching Geofence: $e");
+      // Use a more specific error message.
+      emit(MapError(message: 'Failed to load geofences for device: $e', previousState: currentMapState));
     }
   }
-  Future<void> _onAddTraccarGeofence(AddTraccarGeofence event, Emitter<MapState> emit) async {
+  Future<void> _onAddTraccarGeofence(AddTraccarGeofence event, Emitter<MapState> emit,) async {
     final currentMapState = _getLoadedState();
-    print("[Map Bloc]    Mapstate   ${currentMapState}");
     emit(AddTraccarGeofenceLoading(previousState: currentMapState));
-    try {
-      print("[MapBloc] Add Traccar Geofence  ${event.geofenceJson}  ${event.deviceId}");
-      final response = await Traccar.addGeofence(event.geofenceJson, event.deviceId);
 
-      if(response != null) {
-        emit(AddTraccarGeofenceLoaded(previousState: currentMapState, responseBody: response));
+    try {
+      // Step 1: Create Geofence (without devicesIds)
+      final geofenceBody = event.geofenceJson;
+      final geofenceResponse = await Traccar.addGeofence(geofenceBody,event.deviceId);
+      if (geofenceResponse == null) {
+        emit(MapError(message: "Failed to create geofence", previousState: currentMapState));
+        return;
       }
-      else {
-        emit(MapError(message: "Error Adding Geofences"));
+      final geofenceResponseBody = jsonDecode(geofenceResponse);
+      print("[MapBloc]   Geofence created ${geofenceResponseBody['id']}");
+
+      final geofenceId = geofenceResponseBody['id'];
+
+      // Step 2: Add permission
+      final permissionBody = GeofencePermModel();
+      permissionBody.geofenceId = geofenceId;
+      permissionBody.deviceId = int.parse(event.deviceId);
+
+
+      var perm = json.encode(permissionBody);
+
+      final permissionSuccess = await Traccar.addPermission(perm);
+      if (!permissionSuccess) {
+        emit(MapError(message: "Failed to assign device to geofence", previousState: currentMapState));
+        return;
       }
-    } catch(e) {
-      print("Error while Adding Geofence");
-      emit(MapError(message: 'Failed to add device: $e', previousState: currentMapState));
+      emit(AddTraccarGeofenceLoaded(previousState: currentMapState, responseBody: "Geofence added and linked"));
+      add(GetTraccarGeofencesByDeviceId(int.parse(event.deviceId)));
+     // await Future.delayed(const Duration(milliseconds: 300));
+      emit(currentMapState);
+      print("Finalllyyyyyy ");
+    } catch (e) {
+      emit(MapError(message: "Error adding geofence: $e", previousState: currentMapState));
     }
   }
   Future<void> _onUpdateTraccarGeofence(UpdateTraccarGeofence event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onDeleteTraccarGeofence(DeleteTraccarGeofence event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onGetTraccarNotificationTypes(GetTraccarNotificationTypes event, Emitter<MapState> emit) async { /* ... */ }
+  Future<void> _onDeleteTraccarGeofence(DeleteTraccarGeofence event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(DeleteTraccarGeofenceLoading(previousState: currentMapState));
+    print("[Map Bloc] On Delete Traccar GeoFence   $currentMapState");
+    try {
+      // The Traccar API expects an integer ID for deletion.
+      final success = await Traccar.deleteGeofence(event.id);
+      emit(DeleteTraccarGeofenceLoaded(previousState: currentMapState, success: success));
+      emit(currentMapState);
+
+    } catch (e) {
+      emit(MapError(message: "Failed to delete geofence: $e", previousState: currentMapState));
+    }
+  }  Future<void> _onGetTraccarNotificationTypes(GetTraccarNotificationTypes event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onGetTraccarNotifications(GetTraccarNotifications event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onAddTraccarNotification(AddTraccarNotification event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onDeleteTraccarNotification(DeleteTraccarNotification event, Emitter<MapState> emit) async { /* ... */ }

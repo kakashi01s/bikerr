@@ -200,6 +200,7 @@ class DeleteTraccarDeviceLoaded extends MapState {
 }
 
 
+
 // --- Positions ---
 class PositionByIdLoading extends MapState {
   final MapLoaded previousState;
@@ -371,6 +372,16 @@ class DeleteTraccarGeofenceLoaded extends MapState {
   const DeleteTraccarGeofenceLoaded({required this.previousState, required this.success});
   @override
   List<Object> get props => [previousState, success];
+}
+
+// Generic error state. Can hold the previous state to allow the UI to
+// show the map with an error overlay.
+class TraccarGeofenceError extends MapState {
+  final String message;
+  final MapLoaded? previousState;
+  const TraccarGeofenceError({required this.message, this.previousState});
+  @override
+  List<Object?> get props => [message, previousState];
 }
 
 

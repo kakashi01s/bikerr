@@ -68,6 +68,7 @@ dependencies:
     path: ./traccar_gennissi
   tuple: ^2.0.2
   flutter_compass: ^0.8.1
+  flutter_sliding_toast: ^1.5.2
 #  traccar_hypegps: ^0.0.25
 
 dev_dependencies:

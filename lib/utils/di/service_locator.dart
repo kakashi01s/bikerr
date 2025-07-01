@@ -139,7 +139,7 @@ Future<void> init() async {
       refreshTokenUsecase: sl(),
     ),
   );
-  sl.registerFactory(() => MapBloc(sl()));
+  sl.registerLazySingleton(() => MapBloc(sl()));
   sl.registerFactory(
     () => ChatBloc(
       sl(),

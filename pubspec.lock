@@ -443,6 +443,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.2"
+  flutter_sliding_toast:
+    dependency: "direct main"
+    description:
+      name: flutter_sliding_toast
+      sha256: ceebeac234b0de476811d3690d0fc0a146d4805df5deda9f7b6c1ebc43502a30
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.2"
   flutter_svg:
     dependency: "direct main"
     description:

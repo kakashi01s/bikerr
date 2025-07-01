@@ -6,298 +6,431 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_sliding_toast/flutter_sliding_toast.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:traccar_gennissi/traccar_gennissi.dart';
 
 import '../bloc/map_bloc.dart';
 
 class GeoFenceScreen extends StatefulWidget {
   final position;
-  final deviceId;
+  final int deviceId;
 
-  const GeoFenceScreen({super.key, required this.position,required this.deviceId});
+  const GeoFenceScreen({super.key, required this.position, required this.deviceId});
 
   @override
   State<GeoFenceScreen> createState() => _GeoFenceScreenState();
 }
 
 class _GeoFenceScreenState extends State<GeoFenceScreen> {
-  LatLng? _markerLocation; // Stores the location of the pinned marker.
-  double _geofenceRadius = 50.0; // Initial geofence radius in meters.
-  // Lists to store markers and circles to be displayed on the map.
-  List<Marker> _markers = [];
-  List<CircleMarker> _circles = [];
+  // --- State Variables ---
 
-  // Initial camera position for the map (e.g., a default city).
-  static const LatLng _initialCenter = LatLng(24.5854, 73.7125); // Coordinates for Udaipur, Rajasthan, India.
+  bool _isCreatingGeofence = false;
+
+  LatLng? _markerLocation;
+  double _geofenceRadius = 50.0;
+  final List<Marker> _newGeofenceMarkers = [];
+  final List<CircleMarker> _newGeofenceCircles = [];
+
+  final List<Marker> _existingGeofenceMarkers = [];
+  final List<CircleMarker> _existingGeofenceCircles = [];
+  int? _selectedGeofenceId;
+
+  static const LatLng _initialCenter = LatLng(24.5854, 73.7125);
   static const double _initialZoom = 12.0;
 
   @override
   void initState() {
-    context.read<MapBloc>().add(GetTraccarGeofencesByDeviceId(widget.deviceId));
     super.initState();
-    // No initial marker or circle, user will tap to pin.
+    context.read<MapBloc>().add(GetTraccarGeofencesByDeviceId(widget.deviceId));
   }
 
-  // Function to handle map taps and place a marker.
+  // --- Geofence Parsing and Drawing Logic ---
+
+  Map<String, double?> _parseGeofenceArea(String area) {
+    try {
+      final cleanedArea = area.replaceAll('CIRCLE (', '').replaceAll(')', '');
+      final parts = cleanedArea.split(',');
+      final latLon = parts[0].split(' ');
+      return {
+        'lat': double.tryParse(latLon[0]),
+        'lon': double.tryParse(latLon[1]),
+        'radius': double.tryParse(parts[1].trim())
+      };
+    } catch (e) {
+      return {'lat': null, 'lon': null, 'radius': null};
+    }
+  }
+
+  void _updateExistingGeofencesOnMap(List<GeofenceModel> geofences) {
+    _existingGeofenceMarkers.clear();
+    _existingGeofenceCircles.clear();
+
+    for (var geofence in geofences) {
+      final parsedArea = _parseGeofenceArea(geofence.area ?? '');
+      final lat = parsedArea['lat'];
+      final lon = parsedArea['lon'];
+      final radius = parsedArea['radius'];
+
+      if (lat != null && lon != null && radius != null) {
+        final center = LatLng(lat, lon);
+        final isSelected = geofence.id == _selectedGeofenceId;
+
+        _existingGeofenceCircles.add(
+          CircleMarker(
+            point: center,
+            radius: radius,
+            color: isSelected ? Colors.orange.withOpacity(0.4) : Colors.green.withOpacity(0.3),
+            borderColor: isSelected ? Colors.orange : Colors.green,
+            borderStrokeWidth: isSelected ? 3 : 2,
+          ),
+        );
+        _existingGeofenceMarkers.add(
+          Marker(
+            point: center,
+            width: 150,
+            height: 50,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isCreatingGeofence = false;
+                  if (_selectedGeofenceId == geofence.id) {
+                    _selectedGeofenceId = null;
+                  } else {
+                    _selectedGeofenceId = geofence.id;
+                  }
+                });
+              },
+              child: Align(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: isSelected ? Border.all(color: Colors.orange, width: 2) : null,
+                  ),
+                  child: Text(
+                    geofence.name ?? 'Geofence',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    setState(() {});
+  }
+
+  // --- Event Handlers ---
+
   void _onMapTapped(TapPosition tapPosition, LatLng latLng) {
     setState(() {
-      _markerLocation = latLng; // Update marker location.
-      _updateMapElements(); // Update markers and circles on the map.
+      _isCreatingGeofence = true;
+      _selectedGeofenceId = null;
+      _markerLocation = latLng;
+      _updateNewGeofenceElements();
     });
   }
 
-  // Function to update the markers and circles lists based on _markerLocation and _geofenceRadius.
-  void _updateMapElements() {
-    _markers.clear(); // Clear existing markers.
-    _circles.clear(); // Clear existing circles.
-
+  void _updateNewGeofenceElements() {
+    _newGeofenceMarkers.clear();
+    _newGeofenceCircles.clear();
     if (_markerLocation != null) {
-      // Add the pinned marker.
-      _markers.add(
+      _newGeofenceMarkers.add(
         Marker(
           point: _markerLocation!,
           width: 80,
           height: 80,
-          child:  const Icon(
-            Icons.location_pin,
-            color: Colors.red,
-            size: 40.0,
-          ),
-          // You can add a tooltip for information on tap if desired.
-          // Or use a custom GestureDetector for more complex info window.
+          child: const Icon(Icons.location_pin, color: Colors.red, size: 40.0),
         ),
       );
-
-      // Add the geofence circle.
-      _circles.add(
+      _newGeofenceCircles.add(
         CircleMarker(
           point: _markerLocation!,
-          radius: _geofenceRadius, // Radius from the slider.
-        //  use  : false, // Do not use meter conversion for radius (it's already in meters).
-          color: Colors.blue.withOpacity(0.2), // Semi-transparent blue fill.
-          borderColor: Colors.blue, // Blue border.
+          radius: _geofenceRadius,
+          color: Colors.blue.withOpacity(0.2),
+          borderColor: Colors.blue,
           borderStrokeWidth: 2,
         ),
       );
     }
   }
 
+  void _cancelCreation() {
+    setState(() {
+      _isCreatingGeofence = false;
+      _markerLocation = null;
+      _updateNewGeofenceElements();
+    });
+  }
+
+  void _confirmAndDeleteGeofence() {
+    if (_selectedGeofenceId == null) return;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Geofence?'),
+        content: const Text('Are you sure you want to delete this geofence?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              context.read<MapBloc>().add(DeleteTraccarGeofence(_selectedGeofenceId!.toString()));
+              Navigator.of(context).pop();
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Build Method ---
+
   @override
   Widget build(BuildContext context) {
+    final showDeleteButton = _selectedGeofenceId != null && !_isCreatingGeofence;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // appBar: AppBar(
-      //   title: const Text('Circular Geofence Map'),
-      //   centerTitle: true,
-      //   elevation: 0,
-      //   backgroundColor: Colors.transparent, // Custom app bar color.
-      //   shape: const RoundedRectangleBorder(
-      //     borderRadius: BorderRadius.vertical(
-      //       bottom: Radius.circular(15),
-      //     ),
-      //   ),
-      // ),
-      body: Stack(
-        children: [
+      body: BlocListener<MapBloc, MapState>(
+        listener: (context, state) {
+          if (state is GeofencesLoaded) {
+            _updateExistingGeofencesOnMap(state.geofences);
+          } else if (state is DeleteTraccarGeofenceLoaded && state.success) {
+            InteractiveToast.pop(
 
-          // FlutterMap widget occupying the entire body.
-          FlutterMap(
-            options: MapOptions(
-              initialCenter: _markerLocation ?? _initialCenter, // Center on marker if present, else initial.
-              initialZoom: _initialZoom,
-              onTap: _onMapTapped, // Handle map taps.
-              maxZoom: 18.0, // Define max zoom for tiles.
-              minZoom: 2.0,  // Define min zoom for tiles.
-            ),
-            children: [
-              // Tile Layer for map tiles (OpenStreetMap is commonly used).
-              TileLayer(
-                urlTemplate: 'http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}',
-              ),
-              // Marker Layer to display markers.
-              MarkerLayer(
-                markers: _markers,
-              ),
-              // Circle Layer to display geofence circles.
-              CircleLayer(
-                circles: _circles,
-              ),
-            ],
-          ),
-          // Geofence radius slider, positioned at the bottom.
-          if (_markerLocation != null) // Only show slider if a marker is pinned.
-            Positioned(
-              top: 100.0,
-              left: 20.0,
-              right: 20.0,
-              child: Card(
-
-                elevation: 8,
-                color: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Geofence Radius: ${_geofenceRadius.toStringAsFixed(0)} meters',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      Slider(
-                        thumbColor: AppColors.bikerrRedFill ,
-                        activeColor: AppColors.markerBg1,
-                        secondaryActiveColor: Colors.transparent,
-                        value: _geofenceRadius,
-                        min: 10.0, // Minimum radius (e.g., 100 meters).
-                        max: 500.0, // Maximum radius (e.g., 5 kilometers).
-                        divisions: 100, // (Max - Min) / 100 + 1 => 49 divisions for 100m steps
-                        label: '${_geofenceRadius.toStringAsFixed(0)}m',
-                        onChanged: (newValue) {
-                          setState(() {
-                            _geofenceRadius = newValue; // Update radius.
-                            _updateMapElements(); // Redraw circle.
-                          });
-                        },
-                      ),
-                      // const Text(
-                      //   'Tap on the map to pin a location and set a geofence.',
-                      //   style: TextStyle(fontSize: 12, color: Colors.grey),
-                      //   textAlign: TextAlign.center,
-                      // ),
-                    ],
+              context: context,
+              //leading: _leadingWidget(),
+              title: Center(
+                child: const Text(
+                  "Geo Fence Deleted",
+                  style: TextStyle(
+                    color: AppColors.bikerrRedFill,
+                    fontSize: 20
                   ),
                 ),
               ),
+             // trailing: _trailingWidget(),
+              toastStyle: const ToastStyle(titleLeadingGap: 10, backgroundColor: Colors.transparent),
+              toastSetting: const SlidingToastSetting(
+                animationDuration: Duration(seconds: 1),
+                displayDuration: Duration(seconds: 2),
+                toastStartPosition: ToastPosition.top,
+                toastAlignment: Alignment.topCenter,
+              ),
+            );
+            setState(() => _selectedGeofenceId = null);
+            context.read<MapBloc>().add(GetTraccarGeofencesByDeviceId(widget.deviceId));
+          } else if (state is MapError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${state.message}'), backgroundColor: Colors.red),
+            );
+          }
+        },
+        child: Stack(
+          children: [
+            FlutterMap(
+              options: MapOptions(
+                initialCenter: _markerLocation ?? _initialCenter,
+                initialZoom: _initialZoom,
+                onTap: _onMapTapped,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}',
+                ),
+                if (!_isCreatingGeofence) ...[
+                  CircleLayer(circles: _existingGeofenceCircles),
+                  MarkerLayer(markers: _existingGeofenceMarkers),
+                ],
+                if (_isCreatingGeofence) ...[
+                  CircleLayer(circles: _newGeofenceCircles),
+                  MarkerLayer(markers: _newGeofenceMarkers),
+                ]
+              ],
             ),
+            if (_isCreatingGeofence) ...[
+              Positioned(
+                top: 100.0,
+                left: 20.0,
+                right: 20.0,
+                child: Card(
+                  elevation: 8,
+                  color: Colors.transparent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Adjust Your Geofence',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.bikerrbgColor),
+                        ),
+
+                        Slider(
+                          secondaryActiveColor: Colors.transparent,
 
 
+                          thumbColor: AppColors.bikerrRedFill,
+                          activeColor: AppColors.markerBg1,
+                          value: _geofenceRadius,
+                          min: 10.0,
+                          max: 500.0,
+                          divisions: 49,
+                          label: '${_geofenceRadius.toStringAsFixed(0)}m',
+                          onChanged: (newValue) {
+                            setState(() {
+                              _geofenceRadius = newValue;
+                              _updateNewGeofenceElements();
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 30,
+                left: 20,
+                right: 20,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.grey[700],
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                      onPressed: _cancelCreation,
+                      icon: const Icon(Icons.clear),
+                      label: const Text("Cancel"),
+                    ),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.bikerrRedFill,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.add),
+                      label: const Text("Add"),
+                      // ** RESTORED FUNCTIONALITY **
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) {
+                            final TextEditingController nameController = TextEditingController();
+                            final TextEditingController descController = TextEditingController();
+                            return AlertDialog(
+                              title: const Text('Add Geofence Details'),
+                              content: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextField(
+                                      controller: nameController,
+                                      decoration: const InputDecoration(labelText: 'Name'),
+                                    ),
+                                    TextField(
+                                      controller: descController,
+                                      decoration: const InputDecoration(labelText: 'Description'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    final name = nameController.text.trim();
+                                    final desc = descController.text.trim();
 
-          if (_markerLocation != null) // Only show Button if a marker is pinned.
+                                    if (name.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Name is required.')),
+                                      );
+                                      return;
+                                    }
+
+                                    final area = 'CIRCLE (${_markerLocation!.latitude} ${_markerLocation!.longitude}, $_geofenceRadius)';
+
+                                    final GeofenceModel geofenceJson = GeofenceModel();
+                                    geofenceJson.id= -1;
+                                    geofenceJson.name = name;
+                                    geofenceJson.description = desc;
+                                    geofenceJson.area = area;
+                                    geofenceJson.calendarId=0;
+
+                                    context.read<MapBloc>().add(AddTraccarGeofence(jsonEncode(geofenceJson), widget.deviceId.toString()));
+
+                                    Navigator.pop(dialogContext);
+
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Geofence creation requested.')),
+                                    );
+
+                                    _cancelCreation(); // Exit creation mode
+                                  },
+                                  child: const Text('Add'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (showDeleteButton)
+              Positioned(
+                bottom: 30,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                    ),
+                    onPressed: _confirmAndDeleteGeofence,
+                    icon: const Icon(Icons.delete_forever),
+                    label: const Text("Delete Geofence"),
+                  ),
+                ),
+              ),
             Positioned(
-            bottom: 30,
-            left: 0,
-            right: 0,
-            child: Center(
+              top: 40,
+              left: 20,
               child: Container(
-                width: MediaQuery.of(context).size.width * 0.5,
                 padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(25),
                   color: AppColors.bgColor,
                 ),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (dialogContext) {
-                        final TextEditingController _nameController = TextEditingController();
-                        final TextEditingController _descController = TextEditingController();
-                        return AlertDialog(
-                          title: const Text('Add Geofence Details'),
-                          content: SingleChildScrollView(
-                            child: Column(
-                              children: [
-                                TextField(
-                                  controller: _nameController,
-                                  decoration: const InputDecoration(labelText: 'Name'),
-                                ),
-                                TextField(
-                                  controller: _descController,
-                                  decoration: const InputDecoration(labelText: 'Description'),
-                                ),
-                              ],
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(dialogContext);
-                              },
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                final name = _nameController.text.trim();
-                                final desc = _descController.text.trim();
-
-                                if (name.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Name is required.')),
-                                  );
-                                  return;
-                                }
-
-                                final area = 'CIRCLE (${_markerLocation!.latitude} ${_markerLocation!.longitude}, $_geofenceRadius)';
-
-
-                                final geofenceJson = {
-
-                                  "name": name,
-                                  "description": desc,
-                                  "area": area,
-
-                                };
-
-                                context.read<MapBloc>().add(AddTraccarGeofence(jsonEncode(geofenceJson), widget.deviceId.toString()));
-
-                                Navigator.pop(dialogContext);
-
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Geofence creation requested.')),
-                                );
-                              },
-                              child: const Text('Add'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-
-
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Add",
-                        style: TextStyle(
-                          color: AppColors.bikerrRedFill,
-                        ),
-                      ),
-                      Icon(Icons.add, color: AppColors.bikerrRedFill),
-                    ],
-                  ),
-                ),
+                child: const BackButtonComponent(),
               ),
             ),
-          ),
-
-
-
-          Positioned(
-              top: 40,
-              left: 20,
-
-              child: Container(
-                padding: const EdgeInsets.all(9,),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(25),
-                  color: AppColors.bgColor, // Background color for the container
-                ),
-                alignment: Alignment.center, // Aligns its child (BackButtonComponent) to the center
-                child: BackButtonComponent(),
-              )),
-        ],
+          ],
+        ),
       ),
     );
   }
