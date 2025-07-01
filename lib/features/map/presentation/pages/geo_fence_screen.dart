@@ -237,18 +237,18 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
                                   return;
                                 }
 
-                                final area = 'CIRCLE (${_markerLocation!.longitude} ${_markerLocation!.latitude}, $_geofenceRadius)';
+                                final area = 'CIRCLE (${_markerLocation!.latitude} ${_markerLocation!.longitude}, $_geofenceRadius)';
+
 
                                 final geofenceJson = {
-                                  "id": 0,
+
                                   "name": name,
                                   "description": desc,
                                   "area": area,
-                                  "calendarId": 0,
-                                  "attributes": {}
+
                                 };
 
-                                context.read<MapBloc>().add(AddTraccarGeofence(jsonEncode(geofenceJson)));
+                                context.read<MapBloc>().add(AddTraccarGeofence(jsonEncode(geofenceJson), widget.deviceId.toString()));
 
                                 Navigator.pop(dialogContext);
 

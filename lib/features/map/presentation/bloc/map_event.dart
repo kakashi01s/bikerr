@@ -198,8 +198,9 @@ class DeleteTraccarPermission extends MapEvent {
 
 // -- Traccar Geofence Events --
 class AddTraccarGeofence extends MapEvent {
+  final String deviceId;
   final String geofenceJson;
-  const AddTraccarGeofence(this.geofenceJson);
+  const AddTraccarGeofence(this.geofenceJson, this.deviceId);
   @override
   List<Object?> get props => [geofenceJson];
 }

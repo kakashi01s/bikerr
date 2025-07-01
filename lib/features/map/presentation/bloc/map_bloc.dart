@@ -76,6 +76,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   /// Helper to get the last known core MapLoaded state from any feature state.
   MapLoaded _getLoadedState() {
+
     final s = state;
     if (s is MapLoaded) return s;
     if (s is MapError && s.previousState != null) return s.previousState!;
@@ -95,8 +96,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     if (s is PositionByIdLoaded) return s.previousState;
     if (s is LatestPositionsLoaded) return s.previousState;
     if (s is DeleteTraccarDeviceLoaded) return s.previousState;
+
+    print('[MapBoc]  state  ${s}');
     // Add other states as needed...
     return const MapLoaded();
+
   }
 
   // --- Core Lifecycle and Position Handlers ---
@@ -339,7 +343,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       if(geofences.isNotEmpty)
       emit(GeofencesLoaded(previousState: currentMapState, geofences: geofences));
 
-      emit(MapError(message: "Error Loading Geofences"));
+      emit(GeofencesLoaded(previousState: currentMapState,geofences:[]));
     } catch(e) {
       print("Error while fetching Geofence");
       emit(MapError(message: 'Failed to Load device: $e', previousState: currentMapState));
@@ -347,9 +351,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
   Future<void> _onAddTraccarGeofence(AddTraccarGeofence event, Emitter<MapState> emit) async {
     final currentMapState = _getLoadedState();
+    print("[Map Bloc]    Mapstate   ${currentMapState}");
     emit(AddTraccarGeofenceLoading(previousState: currentMapState));
     try {
-      final response = await Traccar.addGeofence(event.geofenceJson, currentMapState.selectedDeviceId.toString());
+      print("[MapBloc] Add Traccar Geofence  ${event.geofenceJson}  ${event.deviceId}");
+      final response = await Traccar.addGeofence(event.geofenceJson, event.deviceId);
 
       if(response != null) {
         emit(AddTraccarGeofenceLoaded(previousState: currentMapState, responseBody: response));
