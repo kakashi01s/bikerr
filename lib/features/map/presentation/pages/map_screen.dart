@@ -116,6 +116,7 @@ class _MapScreenState extends State<MapScreen>
     if (state is DeleteTraccarDeviceLoaded) return state.previousState;
     if (state is GeofencesLoading) return state.previousState;
     if (state is GeofencesLoaded) return state.previousState;
+    if (state is TraccarEventsLoaded) return state.previousState;
     // Add any other states that contain a `previousState` here.
     return const MapLoaded();
   }
@@ -187,6 +188,13 @@ class _MapScreenState extends State<MapScreen>
                     if (position != null && _isMapReady) {
                       _animateMapAndMarker(position);
                     }
+                  } else if (state is TraccarEventsLoaded) {
+                    if (state.events.isEmpty) {
+                      print("No events found for the selected period.");
+                    }
+                    for (var event in state.events) {
+                      print("Event received: $event");
+                    }
                   }
                 },
                 builder: (context, state) {
@@ -244,7 +252,12 @@ class _MapScreenState extends State<MapScreen>
             },
           ),
           children: [
-            TileLayer(urlTemplate: 'http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}'),
+            TileLayer(
+              urlTemplate: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+
+            retinaMode: RetinaMode.isHighDensity(context),
+
+            ),
 
             if (state is RouteReportLoaded)
               _buildRoutePolyline(state.reports),
@@ -377,8 +390,8 @@ class _MapScreenState extends State<MapScreen>
         if (device.id != null && device.name != null) device.id!: "${device.name} (${device.status ?? '...'})",
     };
 
-    final finalSelectedDeviceId = deviceIdToName.containsKey(selectedDeviceId) ? selectedDeviceId : null;
-
+    final availableDeviceIds = deviceIdToName.keys.toList();
+    final finalSelectedDeviceId = availableDeviceIds.contains(selectedDeviceId) ? selectedDeviceId : null;
     return Align(
       alignment: Alignment.topLeft,
       child: Container(
@@ -396,7 +409,15 @@ class _MapScreenState extends State<MapScreen>
             dropdownColor: Colors.black.withOpacity(0.85),
             style: const TextStyle(color: Colors.white, fontSize: 16.0),
             icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-            onChanged: (id) => context.read<MapBloc>().add(TraccarDeviceSelected(id)),
+            onChanged: (id) {
+              context.read<MapBloc>().add(TraccarDeviceSelected(id));
+
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (id != null) {
+                  context.read<MapBloc>().add(GetTraccarSendCommands(id.toString()));
+                }
+              });
+            },
             items: deviceIdToName.entries.map((entry) {
               return DropdownMenuItem<int?>(
                 value: entry.key,
@@ -436,6 +457,7 @@ class _MapScreenState extends State<MapScreen>
       ),
     );
   }
+
 
   Future<void> _showRideHistoryPicker(BuildContext context, MapLoaded state) async {
     final now = DateTime.now();
@@ -486,7 +508,9 @@ class _MapScreenState extends State<MapScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(deviceName ?? "More Details", style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
-                  const Icon(Icons.precision_manufacturing_rounded, color: Colors.blueAccent, size: 28),
+                  IconButton(icon:Icon(Icons.precision_manufacturing_rounded, color: Colors.blueAccent, size: 28), onPressed: () { 
+
+                  },),
                 ],
               ),
               const Divider(color: Colors.white24, height: 30),
@@ -501,6 +525,13 @@ class _MapScreenState extends State<MapScreen>
                   "position": state.currentDevicePosition,
                   "deviceId": state.selectedDeviceId,
                 });
+              }),
+              _buildActionRow(context, icon: Icons.notification_add, label: "Notification Settings", onTap: () {
+                Navigator.of(context).pop(); // close modal bottom sheet before navigating
+                Navigator.of(context).pushNamed(RoutesName.traccarNotificationSettingsScreen, arguments: {
+              "position": state.currentDevicePosition,
+              "deviceId": state.selectedDeviceId,
+              });
               }),
             ],
           ),

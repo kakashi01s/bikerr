@@ -17,6 +17,7 @@ import 'package:bikerr/features/conversations/presentation/pages/join_new_conver
 import 'package:bikerr/features/map/presentation/bloc/map_bloc.dart';
 import 'package:bikerr/features/map/presentation/pages/geo_fence_screen.dart';
 import 'package:bikerr/features/map/presentation/pages/map_screen.dart';
+import 'package:bikerr/features/map/presentation/pages/traccar_notifications_settings_screen.dart';
 import 'package:bikerr/utils/di/service_locator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -43,6 +44,15 @@ class Routes {
         return MaterialPageRoute(builder: (context) => BlocProvider.value(
             value: sl<MapBloc>(),
             child: GeoFenceScreen(position: position, deviceId: deviceId, )
+        ));
+
+        case RoutesName.traccarNotificationSettingsScreen:
+         final arguments = settings.arguments as Map<String, dynamic>?;
+         final deviceId = arguments?['deviceId'];
+
+        return MaterialPageRoute(builder: (context) => BlocProvider.value(
+            value: sl<MapBloc>(),
+            child: TraccarNotificationSettingsScreen( deviceId: deviceId, )
         ));
       case RoutesName.mapScreen:
         return MaterialPageRoute(builder: (context) {

@@ -138,6 +138,21 @@ class TraccarDevicesLoaded extends MapState {
   @override
   List<Object> get props => [previousState, devices];
 }
+// Events
+class TraccarEventsLoading extends MapState {
+  final MapLoaded previousState;
+  const TraccarEventsLoading({required this.previousState});
+  @override
+  List<Object> get props => [previousState];
+}
+
+class TraccarEventsLoaded extends MapState {
+  final MapLoaded previousState;
+  final List<Event> events;
+  const TraccarEventsLoaded({required this.previousState, required this.events});
+  @override
+  List<Object> get props => [previousState, events];
+}
 
 class DeviceByIdLoading extends MapState {
   final MapLoaded previousState;

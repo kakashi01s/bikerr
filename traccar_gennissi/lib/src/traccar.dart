@@ -104,6 +104,7 @@ class Traccar {
             } else if (decoded.containsKey('positions')) {
               _webSocketController.add(PositionModel.fromList(decoded['positions']));
             } else if (decoded.containsKey('events')) {
+              print('[Traccar] WebSocket events received ${decoded['events']}');
               _webSocketController.add(Event.fromList(decoded['events']));
             } else {
               _webSocketController.add(data);
@@ -314,15 +315,18 @@ class Traccar {
     return null;
   }
 
-  static Future<List<String>?> getSendCommands(String id) async {
+  static Future<List?> getSendCommands(String id) async {
     await loadSessionCookieAndBearerToken();
     try {
       final response = await http.get(
-        Uri.parse('$serverURL/api/commands/types?deviceId=$id'),
+        Uri.parse('$serverURL/api/commands/types').replace(queryParameters: {
+        "deviceId" : '$id'
+        }),
         headers: defaultHeaders,
       );
       if (response.statusCode == 200) {
-        return List<String>.from(json.decode(response.body));
+        print("getSendCommands: ${response.body}");
+        return List<Map<String,dynamic>>.from(json.decode(response.body));
       }
       print("getSendCommands failed: ${response.statusCode}");
     } catch (e) {
@@ -442,6 +446,7 @@ class Traccar {
       );
       if (response.statusCode == 200) {
         Iterable list = json.decode(response.body);
+        print('[Traccar]  Notification Types $list');
         return list.map((e) => NotificationTypeModel.fromJson(e)).toList();
       }
       print("getNotificationTypes failed: ${response.statusCode}");
@@ -455,7 +460,7 @@ class Traccar {
     await loadSessionCookieAndBearerToken();
     try {
       final response = await http.post(
-        Uri.parse('$serverURL/api/commands'),
+        Uri.parse('$serverURL/api/commands/send'),
         headers: defaultHeaders,
         body: commandJson,
       );

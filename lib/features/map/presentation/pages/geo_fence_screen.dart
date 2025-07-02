@@ -205,7 +205,7 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
           if (state is GeofencesLoaded) {
             _updateExistingGeofencesOnMap(state.geofences);
           } else if (state is DeleteTraccarGeofenceLoaded && state.success) {
-            InteractiveToast.pop(
+            InteractiveToast.slide(
 
               context: context,
               //leading: _leadingWidget(),
@@ -214,13 +214,13 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
                   "Geo Fence Deleted",
                   style: TextStyle(
                     color: AppColors.bikerrRedFill,
-                    fontSize: 20
+                    fontSize: 5
                   ),
                 ),
               ),
              // trailing: _trailingWidget(),
               toastStyle: const ToastStyle(titleLeadingGap: 10, backgroundColor: Colors.transparent),
-              toastSetting: const SlidingToastSetting(
+              toastSetting:const SlidingToastSetting(
                 animationDuration: Duration(seconds: 1),
                 displayDuration: Duration(seconds: 2),
                 toastStartPosition: ToastPosition.top,
@@ -245,8 +245,9 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: 'http://mt0.google.com/vt/lyrs=m&hl=en&x={x}&y={y}&z={z}',
-                ),
+                  urlTemplate: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+
+                  retinaMode: RetinaMode.isHighDensity(context),                ),
                 if (!_isCreatingGeofence) ...[
                   CircleLayer(circles: _existingGeofenceCircles),
                   MarkerLayer(markers: _existingGeofenceMarkers),

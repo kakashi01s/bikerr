@@ -1,16 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:bikerr/services/session/session_manager.dart';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:traccar_gennissi/traccar_gennissi.dart';
 import 'package:bikerr/features/map/domain/usecases/get_current_location_usecase.dart';
+
+import '../../../../services/notifications/notification_service.dart';
 
 part 'map_event.dart';
 part 'map_state.dart';
 
 class MapBloc extends Bloc<MapEvent, MapState> {
+  final session = SessionManager.instance;
   final GetCurrentLocationUsecase getCurrentLocationUsecase;
+  final NotificationService notificationService;
 
   StreamSubscription<Position>? _positionStream;
   StreamSubscription<dynamic>? _webSocketSubscription;
@@ -18,7 +24,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   // Internal cache for the device list to be accessible across different states.
   List<Device> _devices = [];
 
-  MapBloc(this.getCurrentLocationUsecase) : super(const MapInitial()) {
+  MapBloc(this.getCurrentLocationUsecase, this.notificationService) : super(const MapInitial()) {
     // Register all event handlers
     on<GetInitialLocation>(_onGetInitialLocation);
     on<StartLocationTracking>(_onStartLocationTracking);
@@ -97,6 +103,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     if (s is PositionByIdLoaded) return s.previousState;
     if (s is LatestPositionsLoaded) return s.previousState;
     if (s is DeleteTraccarDeviceLoaded) return s.previousState;
+    if (s is NotificationsLoaded) return s.previousState;
 
     print('[MapBoc]  state  ${s}');
     return const MapLoaded();
@@ -132,6 +139,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
 
   Future<void> _onTraccarDataReceived(TraccarDataReceived event, Emitter<MapState> emit) async {
+    print("[MapBloc]  Traccar data received ${event.data}");
     final currentLoadedState = _getLoadedState();
     final data = event.data;
 
@@ -153,6 +161,18 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       // If the current state is one that shows devices, update it.
       if (state is TraccarDevicesLoaded) {
         emit(TraccarDevicesLoaded(previousState: currentLoadedState, devices: List<Device>.from(_devices)));
+      }
+    }
+    else if (data is Event) {
+      print('[MapBloc]  Single Event data Received  $data');
+    } else if (data is List<Event>) {
+      for (var event in data) {
+        print('[MapBloc]  List Event data Received  $event');
+        emit(TraccarEventsLoaded(previousState: currentLoadedState, events: data));
+        emit(currentLoadedState);
+        // await notificationService.showNotification(
+        //   RemoteMessage(data: <>)
+        // );
       }
     }
   }
@@ -331,7 +351,22 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   Future<void> _onUpdateTraccarDevice(UpdateTraccarDevice event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onGetTraccarPositions(GetTraccarPositions event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onGetLatestTraccarPositions(GetLatestTraccarPositions event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onGetTraccarSendCommands(GetTraccarSendCommands event, Emitter<MapState> emit) async { /* ... */ }
+  Future<void> _onGetTraccarSendCommands(GetTraccarSendCommands event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(SendCommandsLoading(previousState: currentMapState));
+    print('[MapBloc]   $currentMapState');
+    try {
+      final commands = await Traccar.getSendCommands(event.id) ?? [];
+      print('[MapBloc]   $commands');
+
+    }
+    catch(e) {
+      print("Error while fetching commands: $e");
+      // Use a more specific error message.
+      emit(MapError(message: 'Failed to load commands for device: $e', previousState: currentMapState));
+    }
+  }
+
   Future<void> _onSendTraccarCommand(SendTraccarCommand event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onAddTraccarPermission(AddTraccarPermission event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onDeleteTraccarPermission(DeleteTraccarPermission event, Emitter<MapState> emit) async { /* ... */ }
@@ -352,6 +387,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       emit(MapError(message: 'Failed to load geofences for device: $e', previousState: currentMapState));
     }
   }
+
+
   Future<void> _onAddTraccarGeofence(AddTraccarGeofence event, Emitter<MapState> emit,) async {
     final currentMapState = _getLoadedState();
     emit(AddTraccarGeofenceLoading(previousState: currentMapState));
@@ -405,7 +442,36 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     } catch (e) {
       emit(MapError(message: "Failed to delete geofence: $e", previousState: currentMapState));
     }
-  }  Future<void> _onGetTraccarNotificationTypes(GetTraccarNotificationTypes event, Emitter<MapState> emit) async { /* ... */ }
+  }
+  Future<void> _onGetTraccarNotificationTypes(
+      GetTraccarNotificationTypes event,
+      Emitter<MapState> emit,
+      ) async {
+    final currentState = _getLoadedState();
+    emit(NotificationTypesLoading(previousState: currentState));
+
+    try {
+      final types = await Traccar.getNotificationTypes();
+
+      if (types != null && types.isNotEmpty) {
+        emit(NotificationTypesLoaded(
+          previousState: currentState,
+          notificationTypes: types,
+        ));
+      } else {
+        emit(MapError(
+          message: 'No notification types found.',
+          previousState: currentState,
+        ));
+      }
+    } catch (e) {
+      emit(MapError(
+        message: 'Failed to load notification types: $e',
+        previousState: currentState,
+      ));
+    }
+  }
+
   Future<void> _onGetTraccarNotifications(GetTraccarNotifications event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onAddTraccarNotification(AddTraccarNotification event, Emitter<MapState> emit) async { /* ... */ }
   Future<void> _onDeleteTraccarNotification(DeleteTraccarNotification event, Emitter<MapState> emit) async { /* ... */ }

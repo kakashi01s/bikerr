@@ -132,6 +132,8 @@ class GetTraccarRouteReport extends MapEvent {
   List<Object?> get props => [deviceId, from, to];
 }
 
+
+
 class GetTraccarEventsReport extends MapEvent {
   final String deviceId;
   final String from;
