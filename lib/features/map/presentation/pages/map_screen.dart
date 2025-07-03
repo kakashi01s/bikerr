@@ -45,8 +45,6 @@ class _MapScreenState extends State<MapScreen>
   late LatLngTween _latLngTween;
   late Animation<double> _animation;
 
-  // UI-level cache for the device list. This is updated only when the BLoC
-  // emits a `TraccarDevicesLoaded` state.
   List<Device> _cachedDevices = [];
 
   void _onAnimationTick() {
@@ -102,12 +100,9 @@ class _MapScreenState extends State<MapScreen>
     super.dispose();
   }
 
-  /// Helper to get the last known core MapLoaded state from any feature state.
   MapLoaded _getLoadedState(MapState state) {
     if (state is MapLoaded) return state;
     if (state is MapError && state.previousState != null) return state.previousState!;
-    // This pattern of checking for `previousState` is crucial for handling all
-    // feature-specific loading and loaded states from `map_state.dart`.
     if (state is TraccarDevicesLoading) return state.previousState;
     if (state is TraccarDevicesLoaded) return state.previousState;
     if (state is ReportLoading) return state.previousState;
@@ -117,11 +112,24 @@ class _MapScreenState extends State<MapScreen>
     if (state is GeofencesLoading) return state.previousState;
     if (state is GeofencesLoaded) return state.previousState;
     if (state is TraccarEventsLoaded) return state.previousState;
-    // Add any other states that contain a `previousState` here.
+    if (state is UpdateTraccarDeviceLoading) return state.previousState;
+    if (state is AddTraccarDeviceLoading) return state.previousState;
+    if (state is PositionByIdLoading) return state.previousState;
+    if (state is PositionByIdLoaded) return state.previousState;
+    if (state is NotificationTypesLoading) return state.previousState;
+    if (state is NotificationTypesLoaded) return state.previousState;
+    if (state is NotificationsLoading) return state.previousState;
+    if (state is NotificationsLoaded) return state.previousState;
+    if (state is DeleteTraccarGeofenceLoading) return state.previousState;
+    if (state is DeleteTraccarGeofenceLoaded) return state.previousState;
+    if (state is AddTraccarNotificationLoaded) return state.previousState;
+    if (state is AddTraccarNotificationLoading) return state.previousState;
+    if (state is DeleteTraccarNotificationLoading) return state.previousState;
+    if (state is DeleteTraccarNotificationLoaded) return state.previousState;
+    if (state is SendCommandsLoaded) return state.previousState;
     return const MapLoaded();
   }
 
-  /// Determines if the current state is a background loading state.
   bool _isLoading(MapState state) {
     return state is ReportLoading ||
         state is TraccarDevicesLoading ||
@@ -138,21 +146,43 @@ class _MapScreenState extends State<MapScreen>
         appBar: const CustomAppBar(),
         body: Column(
           children: [
-            ActionBar(
-              onMessageTap: () => Navigator.pushNamed(context, RoutesName.conversationsScreen),
-              isThisDevice: _isThisDevice,
+            // **MODIFIED**: ActionBar is now wrapped in a BlocBuilder here
+            BlocBuilder<MapBloc, MapState>(
+              builder: (context, state) {
+                final loadedState = _getLoadedState(state);
+                String? speedText;
+                final bool isThisDeviceSelected = loadedState.selectedDeviceId == null;
+
+                if (isThisDeviceSelected) {
+                  // Geolocator speed is in meters/second. Convert to km/h.
+                  final speedInMps = loadedState.currentDevicePosition?.speed;
+                  if (speedInMps != null && speedInMps > 0) {
+                    final speedInKmh = speedInMps * 3.6;
+                    speedText = '${speedInKmh.toStringAsFixed(1)} km/h';
+                  }
+                } else {
+                  // Traccar speed is in knots. Convert to km/h.
+                  final speedInKnots = loadedState.traccarDevicePositions[loadedState.selectedDeviceId]?.speed;
+                  if (speedInKnots != null && speedInKnots > 0) {
+                    final speedInKmh = speedInKnots * 1.852;
+                    speedText = '${speedInKmh.toStringAsFixed(1)} km/h';
+                  }
+                }
+
+                return ActionBar(
+                  onMessageTap: () => Navigator.pushNamed(context, RoutesName.conversationsScreen),
+                  speedText: speedText,
+                );
+              },
             ),
             Expanded(
               child: BlocConsumer<MapBloc, MapState>(
                 listener: (context, state) {
-                  // --- Handle side-effects like SnackBars, Dialogs, and Navigation ---
-
                   if (state is MapError) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('An error occurred: ${state.message}'), backgroundColor: Colors.red),
                     );
                   } else if (state is TraccarDevicesLoaded) {
-                    // Update the local cache when a new device list is fetched.
                     setState(() => _cachedDevices = state.devices);
                   } else if (state is DeleteTraccarDeviceLoaded) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -162,7 +192,6 @@ class _MapScreenState extends State<MapScreen>
                       ),
                     );
                     if (state.success) {
-                      // Refresh device list and go back to "This Device" view.
                       context.read<MapBloc>().add(GetUserTraccarDevices());
                       context.read<MapBloc>().add(const TraccarDeviceSelected(null));
                     }
@@ -183,35 +212,19 @@ class _MapScreenState extends State<MapScreen>
                       Navigator.pushNamedAndRemoveUntil(context, RoutesName.loginScreen, (route) => false);
                     }
                   } else if (state is MapLoaded) {
-                    // This is the core state that drives map and marker animations.
                     final position = _getTargetPosition(state);
                     if (position != null && _isMapReady) {
                       _animateMapAndMarker(position);
                     }
-                  } else if (state is TraccarEventsLoaded) {
-                    if (state.events.isEmpty) {
-                      print("No events found for the selected period.");
-                    }
-                    for (var event in state.events) {
-                      print("Event received: $event");
-                    }
                   }
                 },
                 builder: (context, state) {
-                  // --- Build the UI based on the current state ---
-
-                  if (state is MapInitial) {
-                    return const Center(child: Text('Initializing Map...'));
-                  }
-                  if (state is MapLoading) {
+                  if (state is MapInitial || state is MapLoading) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (state is MapError && state.previousState == null) {
-                    // Handle critical error on initial load.
                     return Center(child: Text('Error: ${state.message}'));
                   }
-
-                  // For all other states, we show the map content, potentially with overlays.
                   return _buildMapContent(context, state);
                 },
               ),
@@ -223,7 +236,6 @@ class _MapScreenState extends State<MapScreen>
   }
 
   Widget _buildMapContent(BuildContext context, MapState state) {
-    // Get the base loaded state to access core map data.
     final loadedState = _getLoadedState(state);
 
     return Stack(
@@ -231,7 +243,7 @@ class _MapScreenState extends State<MapScreen>
         FlutterMap(
           mapController: _mapController,
           options: MapOptions(
-            initialCenter: _getTargetPosition(loadedState) ?? const LatLng(24.5854, 73.7125), // Udaipur
+            initialCenter: _getTargetPosition(loadedState) ?? const LatLng(24.5854, 73.7125),
             initialZoom: 15.0,
             maxZoom: 18.0,
             minZoom: 3.0,
@@ -254,18 +266,13 @@ class _MapScreenState extends State<MapScreen>
           children: [
             TileLayer(
               urlTemplate: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-
-            retinaMode: RetinaMode.isHighDensity(context),
-
+              retinaMode: RetinaMode.isHighDensity(context),
             ),
-
             if (state is RouteReportLoaded)
               _buildRoutePolyline(state.reports),
-
             _buildAnimatedMarker(loadedState),
           ],
         ),
-        // --- UI Overlays ---
         Padding(
           padding: const EdgeInsets.all(10.0),
           child: _buildTraccarDropDown(context, loadedState),
@@ -340,7 +347,6 @@ class _MapScreenState extends State<MapScreen>
         if (currentLatLng.latitude == 0 && currentLatLng.longitude == 0) {
           return const SizedBox.shrink();
         }
-
         return MarkerLayer(
           markers: [
             Marker(
@@ -360,15 +366,10 @@ class _MapScreenState extends State<MapScreen>
   }
 
   PolylineLayer _buildRoutePolyline(List<RouteReport> reports) {
-    // Note: The state was updated to use RouteReport, not PositionModel directly for reports.
-    // Assuming RouteReport can be mapped to LatLng.
-    // If RouteReport has latitude/longitude properties, this will work.
-    // Otherwise, this mapping needs to be adjusted based on the RouteReport model definition.
     final points = reports
         .where((p) => p.latitude != null && p.longitude != null)
         .map((p) => LatLng(p.latitude!, p.longitude!))
         .toList();
-
     return PolylineLayer(
       polylines: [
         Polyline(points: points, strokeWidth: 4.0, color: Colors.blue),
@@ -379,17 +380,13 @@ class _MapScreenState extends State<MapScreen>
   Widget _buildTraccarDropDown(BuildContext context, MapLoaded loadedState) {
     final screenWidth = MediaQuery.of(context).size.width;
     final dropdownWidth = screenWidth * 0.5;
-
-    // Use the cached device list from the widget's state.
     final devices = _cachedDevices;
     final selectedDeviceId = loadedState.selectedDeviceId;
-
     final deviceIdToName = {
       null: 'This Device',
       for (var device in devices)
         if (device.id != null && device.name != null) device.id!: "${device.name} (${device.status ?? '...'})",
     };
-
     final availableDeviceIds = deviceIdToName.keys.toList();
     final finalSelectedDeviceId = availableDeviceIds.contains(selectedDeviceId) ? selectedDeviceId : null;
     return Align(
@@ -411,12 +408,9 @@ class _MapScreenState extends State<MapScreen>
             icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
             onChanged: (id) {
               context.read<MapBloc>().add(TraccarDeviceSelected(id));
-
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (id != null) {
-                  context.read<MapBloc>().add(GetTraccarSendCommands(id.toString()));
-                }
-              });
+              if (id != null) {
+                context.read<MapBloc>().add(GetTraccarSendCommands(id.toString()));
+              }
             },
             items: deviceIdToName.entries.map((entry) {
               return DropdownMenuItem<int?>(
@@ -428,7 +422,7 @@ class _MapScreenState extends State<MapScreen>
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
                         onPressed: () {
-                          Navigator.pop(context); // Close dropdown
+                          Navigator.pop(context);
                           showDialog(
                             context: context,
                             builder: (dialogContext) => AlertDialog(
@@ -458,7 +452,6 @@ class _MapScreenState extends State<MapScreen>
     );
   }
 
-
   Future<void> _showRideHistoryPicker(BuildContext context, MapLoaded state) async {
     final now = DateTime.now();
     final dateRange = await showDateRangePicker(
@@ -467,12 +460,11 @@ class _MapScreenState extends State<MapScreen>
       lastDate: now,
       initialDateRange: DateTimeRange(start: now.subtract(const Duration(days: 1)), end: now),
     );
-
     if (dateRange != null && state.selectedDeviceId != null && mounted) {
-      Navigator.of(context).pop(); // Close the modal sheet
+      Navigator.of(context).pop();
       context.read<MapBloc>().add(GetTraccarRouteReport(
         state.selectedDeviceId!,
-         dateRange.start.toUtc().toIso8601String(),
+        dateRange.start.toUtc().toIso8601String(),
         dateRange.end.toUtc().toIso8601String(),
       ));
     }
@@ -482,9 +474,7 @@ class _MapScreenState extends State<MapScreen>
     final pos = state.traccarDevicePositions[state.selectedDeviceId] ?? state.traccarDeviceLastPosition;
     final totalDistance = (pos?.attributes?['totalDistance'] as num? ?? 0.0) / 1000;
     final topSpeed = (pos?.attributes?['topSpeed'] as num? ?? 0.0);
-    // Use the cached device list to find the name.
     final deviceName = _cachedDevices.firstWhere((d) => d.id == state.selectedDeviceId, orElse: () => Device()).name;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -508,9 +498,7 @@ class _MapScreenState extends State<MapScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(deviceName ?? "More Details", style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
-                  IconButton(icon:Icon(Icons.precision_manufacturing_rounded, color: Colors.blueAccent, size: 28), onPressed: () { 
-
-                  },),
+                  IconButton(icon: const Icon(Icons.precision_manufacturing_rounded, color: Colors.blueAccent, size: 28), onPressed: () {}),
                 ],
               ),
               const Divider(color: Colors.white24, height: 30),
@@ -520,18 +508,17 @@ class _MapScreenState extends State<MapScreen>
               const Divider(color: Colors.white24, height: 30),
               _buildActionRow(context, icon: Icons.history_rounded, label: "Ride History", onTap: () => _showRideHistoryPicker(context, state)),
               _buildActionRow(context, icon: Icons.fence_rounded, label: "Geofences", onTap: () {
-                Navigator.of(context).pop(); // Close sheet before navigating
+                Navigator.of(context).pop();
                 Navigator.of(context).pushNamed(RoutesName.geoFenceScreen, arguments: {
                   "position": state.currentDevicePosition,
                   "deviceId": state.selectedDeviceId,
                 });
               }),
               _buildActionRow(context, icon: Icons.notification_add, label: "Notification Settings", onTap: () {
-                Navigator.of(context).pop(); // close modal bottom sheet before navigating
+                Navigator.of(context).pop();
                 Navigator.of(context).pushNamed(RoutesName.traccarNotificationSettingsScreen, arguments: {
-              "position": state.currentDevicePosition,
-              "deviceId": state.selectedDeviceId,
-              });
+                  "deviceId": state.selectedDeviceId,
+                });
               }),
             ],
           ),

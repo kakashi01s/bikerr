@@ -83,31 +83,70 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   /// Helper to get the last known core MapLoaded state from any feature state.
   MapLoaded _getLoadedState() {
-
     final s = state;
     if (s is MapLoaded) return s;
     if (s is MapError && s.previousState != null) return s.previousState!;
+
     // --- Loading States ---
     if (s is TraccarDevicesLoading) return s.previousState;
     if (s is ReportLoading) return s.previousState;
     if (s is GeofencesLoading) return s.previousState;
     if (s is DeleteTraccarDeviceLoading) return s.previousState;
+    if (s is PositionByIdLoading) return s.previousState;
+    if (s is NotificationTypesLoading) return s.previousState;
+    if (s is NotificationsLoading) return s.previousState;
+    if (s is SendCommandsLoading) return s.previousState;
+    if (s is TraccarLogoutLoading) return s.previousState;
+    if (s is UpdateTraccarUserLoading) return s.previousState;
+    if (s is AddTraccarDeviceLoading) return s.previousState;
+    if (s is UpdateTraccarDeviceLoading) return s.previousState;
+    if (s is SendTraccarCommandLoading) return s.previousState;
+    if (s is AddTraccarGeofenceLoading) return s.previousState;
+    if (s is UpdateTraccarGeofenceLoading) return s.previousState;
+    if (s is DeleteTraccarGeofenceLoading) return s.previousState;
+    if (s is AddTraccarPermissionLoading) return s.previousState;
+    if (s is DeleteTraccarPermissionLoading) return s.previousState;
+    if (s is AddTraccarNotificationLoading) return s.previousState;
+    if (s is DeleteTraccarNotificationLoading) return s.previousState;
+    if (s is TraccarEventsLoading) return s.previousState;
+    if (s is LatestPositionsLoading) return s.previousState;
+    if (s is DeviceByIdLoading) return s.previousState;
+
     // --- Loaded States ---
     if (s is TraccarDevicesLoaded) return s.previousState;
     if (s is RouteReportLoaded) return s.previousState;
     if (s is GeofencesLoaded) return s.previousState;
     if (s is TripReportLoaded) return s.previousState;
     if (s is EventsReportLoaded) return s.previousState;
+    if (s is EventsReportLoaded) return s.previousState;
     if (s is StopsReportLoaded) return s.previousState;
     if (s is SummaryReportLoaded) return s.previousState;
     if (s is PositionByIdLoaded) return s.previousState;
     if (s is LatestPositionsLoaded) return s.previousState;
-    if (s is DeleteTraccarDeviceLoaded) return s.previousState;
     if (s is NotificationsLoaded) return s.previousState;
+    if (s is NotificationTypesLoaded) return s.previousState;
+    if (s is SendCommandsLoaded) return s.previousState;
+    if (s is AddTraccarGeofenceLoaded) return s.previousState;
+    if (s is DeleteTraccarDeviceLoaded) return s.previousState;
+    if (s is DeleteTraccarGeofenceLoaded) return s.previousState;
+    if (s is DeviceByIdLoaded) return s.previousState;
+    if (s is AddTraccarDeviceLoaded) return s.previousState;
+    if (s is AddTraccarNotificationLoaded) return s.previousState;
+    if (s is AddTraccarPermissionLoaded) return s.previousState;
+    if (s is UpdateTraccarDeviceLoaded) return s.previousState;
+    if (s is UpdateTraccarGeofenceLoaded) return s.previousState;
+    if (s is DeleteTraccarPermissionLoaded) return s.previousState;
+    if (s is UpdateTraccarUserLoaded) return s.previousState;
+    if (s is TraccarEventsLoaded) return s.previousState;
+    if (s is RouteReportLoaded) return s.previousState;
+    if (s is DeleteTraccarNotificationLoaded) return s.previousState;
 
-    print('[MapBoc]  state  ${s}');
+
+
+
+
+    print('[MapBloc] Could not find a previous MapLoaded state for state: ${s.runtimeType}. Returning default.');
     return const MapLoaded();
-
   }
 
   // --- Core Lifecycle and Position Handlers ---
@@ -139,7 +178,6 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
 
   Future<void> _onTraccarDataReceived(TraccarDataReceived event, Emitter<MapState> emit) async {
-    print("[MapBloc]  Traccar data received ${event.data}");
     final currentLoadedState = _getLoadedState();
     final data = event.data;
 
@@ -158,22 +196,17 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       } else {
         _devices.add(data);
       }
-      // If the current state is one that shows devices, update it.
       if (state is TraccarDevicesLoaded) {
         emit(TraccarDevicesLoaded(previousState: currentLoadedState, devices: List<Device>.from(_devices)));
       }
     }
     else if (data is Event) {
-      print('[MapBloc]  Single Event data Received  $data');
+      print('[MapBloc] Single Event data Received: $data');
+      emit(TraccarEventsLoaded(previousState: currentLoadedState, events: [data]));
+
     } else if (data is List<Event>) {
-      for (var event in data) {
-        print('[MapBloc]  List Event data Received  $event');
-        emit(TraccarEventsLoaded(previousState: currentLoadedState, events: data));
-        emit(currentLoadedState);
-        // await notificationService.showNotification(
-        //   RemoteMessage(data: <>)
-        // );
-      }
+      print('[MapBloc] List Event data Received: $data');
+      emit(TraccarEventsLoaded(previousState: currentLoadedState, events: data));
     }
   }
 
@@ -233,15 +266,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     final currentLoadedState = _getLoadedState();
     emit(PositionByIdLoading(previousState: currentLoadedState));
     try {
-      // Use the cached device list
-      final device = _devices.firstWhere((d) => d.id == event.deviceId);
-      if (device.lastPositionId != null) {
+      final device = _devices.firstWhere((d) => d.id == event.deviceId, orElse: () => Device());
+      if (device.id != null && device.lastPositionId != null) {
         final positionModel = await Traccar.getPositionById(device.lastPositionId.toString());
-        emit(PositionByIdLoaded(previousState: currentLoadedState, position: positionModel));
-        // Also update the core state's last position for smooth UI transition
-        if (positionModel != null) {
-          emit(currentLoadedState.copyWith(traccarDeviceLastPosition: positionModel));
-        }
+        final newMapState = currentLoadedState.copyWith(traccarDeviceLastPosition: positionModel);
+        emit(PositionByIdLoaded(previousState: newMapState, position: positionModel));
       } else {
         emit(PositionByIdLoaded(previousState: currentLoadedState, position: null));
       }
@@ -256,7 +285,6 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     try {
       final success = await Traccar.deleteDevice(event.deviceId);
       if (success) {
-        // Remove from cache and emit success. The UI can then choose to refetch.
         _devices.removeWhere((d) => d.id == event.deviceId);
       }
       emit(DeleteTraccarDeviceLoaded(previousState: currentMapState, success: success));
@@ -265,16 +293,106 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  // --- Other Feature Handlers (New Implementations) ---
-
-  Future<void> _onGetTraccarRouteReport(GetTraccarRouteReport event, Emitter<MapState> emit) async {
+  Future<void> _onAddTraccarDevice(AddTraccarDevice event, Emitter<MapState> emit) async {
     final currentMapState = _getLoadedState();
-    emit(ReportLoading(previousState: currentMapState));
+    emit(AddTraccarDeviceLoading(previousState: currentMapState));
     try {
-      final reports = await Traccar.getRoute(event.deviceId.toString(), event.from, event.to) ?? [];
-      emit(RouteReportLoaded(previousState: currentMapState, reports: reports));
+      final result = await Traccar.addDevice(event.deviceJson);
+      emit(AddTraccarDeviceLoaded(previousState: currentMapState, responseBody: result));
     } catch (e) {
-      emit(MapError(message: 'Failed to fetch route report: $e', previousState: currentMapState));
+      emit(MapError(message: 'Failed to add device: $e', previousState: currentMapState));
+    }
+  }
+
+  // --- NEWLY IMPLEMENTED FUNCTIONS ---
+
+  Future<void> _onGetTraccarDeviceById(GetTraccarDeviceById event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(DeviceByIdLoading(previousState: currentMapState));
+    try {
+      final device = await Traccar.getDevicesById(event.id);
+      emit(DeviceByIdLoaded(previousState: currentMapState, device: device));
+    } catch (e) {
+      emit(MapError(message: 'Failed to get device by ID: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onUpdateTraccarDevice(UpdateTraccarDevice event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(UpdateTraccarDeviceLoading(previousState: currentMapState));
+    try {
+      final result = await Traccar.updateDevice(event.deviceJson, event.id);
+      emit(UpdateTraccarDeviceLoaded(previousState: currentMapState, responseBody: result));
+    } catch (e) {
+      emit(MapError(message: 'Failed to update device: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onGetTraccarPositions(GetTraccarPositions event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(ReportLoading(previousState: currentMapState)); // Using generic report loading
+    try {
+      final positions = await Traccar.getPositions(event.deviceId, event.from, event.to) ?? [];
+      // NOTE: There isn't a specific state for a position report, so we reuse LatestPositionsLoaded
+      emit(LatestPositionsLoaded(previousState: currentMapState, positions: positions));
+    } catch (e) {
+      emit(MapError(message: 'Failed to fetch positions report: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onGetLatestTraccarPositions(GetLatestTraccarPositions event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(LatestPositionsLoading(previousState: currentMapState));
+    try {
+      final positions = await Traccar.getLatestPositions() ?? [];
+      emit(LatestPositionsLoaded(previousState: currentMapState, positions: positions));
+    } catch (e) {
+      emit(MapError(message: 'Failed to fetch latest positions: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onGetTraccarSendCommands(GetTraccarSendCommands event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(SendCommandsLoading(previousState: currentMapState));
+    try {
+      final commands = await Traccar.getSendCommands(event.id) ?? [];
+      print('[Mapbloc]  Get Traccar Send Commands    ${commands}');
+      emit(SendCommandsLoaded(previousState: currentMapState, commandTypes: commands));
+    } catch (e) {
+      emit(MapError(message: 'Failed to load commands for device: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onSendTraccarCommand(SendTraccarCommand event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(SendTraccarCommandLoading(previousState: currentMapState));
+    try {
+      final result = await Traccar.sendCommands(event.commandJson);
+      emit(SendTraccarCommandLoaded(previousState: currentMapState, responseBody: result));
+    } catch (e) {
+      emit(MapError(message: 'Failed to send command: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onAddTraccarPermission(AddTraccarPermission event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(AddTraccarPermissionLoading(previousState: currentMapState));
+    try {
+      final success = await Traccar.addPermission(event.permissionJson);
+      emit(AddTraccarPermissionLoaded(previousState: currentMapState, success: success));
+    } catch (e) {
+      emit(MapError(message: 'Failed to add permission: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onDeleteTraccarPermission(DeleteTraccarPermission event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(DeleteTraccarPermissionLoading(previousState: currentMapState));
+    try {
+      final success = await Traccar.deletePermission(event.permissionJson);
+      emit(DeleteTraccarPermissionLoaded(previousState: currentMapState, success: success));
+    } catch (e) {
+      emit(MapError(message: 'Failed to delete permission: $e', previousState: currentMapState));
     }
   }
 
@@ -284,8 +402,58 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     try {
       final geofences = await Traccar.getGeoFencesByUserID(event.userId) ?? [];
       emit(GeofencesLoaded(previousState: currentMapState, geofences: geofences));
-    } catch(e) {
-      emit(MapError(message: 'Failed to fetch geofences: $e', previousState: currentMapState));
+    } catch (e) {
+      emit(MapError(message: 'Failed to fetch geofences by user ID: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onUpdateTraccarGeofence(UpdateTraccarGeofence event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(UpdateTraccarGeofenceLoading(previousState: currentMapState));
+    try {
+      final responseBody = await Traccar.updateGeofence(event.geofenceJson, event.id);
+      emit(UpdateTraccarGeofenceLoaded(previousState: currentMapState, responseBody: responseBody));
+    } catch (e) {
+      emit(MapError(message: 'Failed to update geofence: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onAddTraccarNotification(AddTraccarNotification event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(AddTraccarNotificationLoading(previousState: currentMapState));
+    try {
+      final responseBody = await Traccar.addNotification(event.notificationJson);
+      print('[Mapbloc]  Add Traccar Notifications    ${responseBody}');
+      emit(AddTraccarNotificationLoaded(previousState: currentMapState, responseBody: responseBody));
+      add(GetTraccarNotifications());
+
+    } catch (e) {
+      emit(MapError(message: 'Failed to add notification: $e', previousState: currentMapState));
+    }
+  }
+
+  Future<void> _onDeleteTraccarNotification(DeleteTraccarNotification event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(DeleteTraccarNotificationLoading(previousState: currentMapState));
+    try {
+      final success = await Traccar.deleteNotification(event.id);
+      emit(DeleteTraccarNotificationLoaded(previousState: currentMapState, success: success));
+      add(GetTraccarNotifications());
+    } catch (e) {
+      emit(MapError(message: 'Failed to delete notification: $e', previousState: currentMapState));
+    }
+  }
+
+  // --- EXISTING IMPLEMENTATIONS (PRESERVED) ---
+
+  Future<void> _onGetTraccarRouteReport(GetTraccarRouteReport event, Emitter<MapState> emit) async {
+    final currentMapState = _getLoadedState();
+    emit(ReportLoading(previousState: currentMapState));
+    try {
+      final reports = await Traccar.getRoute(event.deviceId.toString(), event.from, event.to) ?? [];
+      emit(RouteReportLoaded(previousState: currentMapState, reports: reports));
+    } catch (e) {
+      emit(MapError(message: 'Failed to fetch route report: $e', previousState: currentMapState));
     }
   }
 
@@ -333,148 +501,89 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  Future<void> _onAddTraccarDevice(AddTraccarDevice event, Emitter<MapState> emit) async {
-    final currentMapState = _getLoadedState();
-    emit(AddTraccarDeviceLoading(previousState: currentMapState));
-    try {
-      final result = await Traccar.addDevice(event.deviceJson);
-      emit(AddTraccarDeviceLoaded(previousState: currentMapState, responseBody: result));
-    } catch (e) {
-      emit(MapError(message: 'Failed to add device: $e', previousState: currentMapState));
-    }
-  }
-
-  // Stubs for all other event handlers...
-  // TODO: Implement the logic for the remaining event handlers following the established pattern.
-
-  Future<void> _onGetTraccarDeviceById(GetTraccarDeviceById event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onUpdateTraccarDevice(UpdateTraccarDevice event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onGetTraccarPositions(GetTraccarPositions event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onGetLatestTraccarPositions(GetLatestTraccarPositions event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onGetTraccarSendCommands(GetTraccarSendCommands event, Emitter<MapState> emit) async {
-    final currentMapState = _getLoadedState();
-    emit(SendCommandsLoading(previousState: currentMapState));
-    print('[MapBloc]   $currentMapState');
-    try {
-      final commands = await Traccar.getSendCommands(event.id) ?? [];
-      print('[MapBloc]   $commands');
-
-    }
-    catch(e) {
-      print("Error while fetching commands: $e");
-      // Use a more specific error message.
-      emit(MapError(message: 'Failed to load commands for device: $e', previousState: currentMapState));
-    }
-  }
-
-  Future<void> _onSendTraccarCommand(SendTraccarCommand event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onAddTraccarPermission(AddTraccarPermission event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onDeleteTraccarPermission(DeleteTraccarPermission event, Emitter<MapState> emit) async { /* ... */ }
-
   Future<void> _onGetTraccarGeofencesByDeviceId(GetTraccarGeofencesByDeviceId event, Emitter<MapState> emit) async {
-
     final currentMapState = _getLoadedState();
     emit(GeofencesLoading(previousState: currentMapState));
-    print('[Mapstate] $currentMapState');
     try {
       final geofences = await Traccar.getGeoFencesByDeviceID(event.deviceId.toString()) ?? [];
-      // Emit the loaded geofences. If none are found, this will correctly emit an empty list.
       emit(GeofencesLoaded(previousState: currentMapState, geofences: geofences));
-      emit(currentMapState);
     } catch(e) {
-      print("Error while fetching Geofence: $e");
-      // Use a more specific error message.
       emit(MapError(message: 'Failed to load geofences for device: $e', previousState: currentMapState));
     }
   }
 
-
-  Future<void> _onAddTraccarGeofence(AddTraccarGeofence event, Emitter<MapState> emit,) async {
+  Future<void> _onAddTraccarGeofence(AddTraccarGeofence event, Emitter<MapState> emit) async {
     final currentMapState = _getLoadedState();
     emit(AddTraccarGeofenceLoading(previousState: currentMapState));
-
     try {
-      // Step 1: Create Geofence (without devicesIds)
-      final geofenceBody = event.geofenceJson;
-      final geofenceResponse = await Traccar.addGeofence(geofenceBody,event.deviceId);
+      if (event.deviceId == null || event.deviceId.isEmpty) {
+        emit(MapError(message: "Invalid device ID", previousState: currentMapState));
+        return;
+      }
+      final geofenceResponse = await Traccar.addGeofence(event.geofenceJson, event.deviceId);
       if (geofenceResponse == null) {
         emit(MapError(message: "Failed to create geofence", previousState: currentMapState));
         return;
       }
       final geofenceResponseBody = jsonDecode(geofenceResponse);
-      print("[MapBloc]   Geofence created ${geofenceResponseBody['id']}");
-
       final geofenceId = geofenceResponseBody['id'];
-
-      // Step 2: Add permission
+      if (geofenceId == null) {
+        emit(MapError(message: "Geofence ID missing in response", previousState: currentMapState));
+        return;
+      }
       final permissionBody = GeofencePermModel();
       permissionBody.geofenceId = geofenceId;
       permissionBody.deviceId = int.parse(event.deviceId);
 
+      final permissionSuccess = await Traccar.addPermission(json.encode(permissionBody));
 
-      var perm = json.encode(permissionBody);
-
-      final permissionSuccess = await Traccar.addPermission(perm);
       if (!permissionSuccess) {
         emit(MapError(message: "Failed to assign device to geofence", previousState: currentMapState));
         return;
       }
       emit(AddTraccarGeofenceLoaded(previousState: currentMapState, responseBody: "Geofence added and linked"));
       add(GetTraccarGeofencesByDeviceId(int.parse(event.deviceId)));
-     // await Future.delayed(const Duration(milliseconds: 300));
-      emit(currentMapState);
-      print("Finalllyyyyyy ");
     } catch (e) {
       emit(MapError(message: "Error adding geofence: $e", previousState: currentMapState));
     }
   }
-  Future<void> _onUpdateTraccarGeofence(UpdateTraccarGeofence event, Emitter<MapState> emit) async { /* ... */ }
+
   Future<void> _onDeleteTraccarGeofence(DeleteTraccarGeofence event, Emitter<MapState> emit) async {
     final currentMapState = _getLoadedState();
     emit(DeleteTraccarGeofenceLoading(previousState: currentMapState));
-    print("[Map Bloc] On Delete Traccar GeoFence   $currentMapState");
     try {
-      // The Traccar API expects an integer ID for deletion.
       final success = await Traccar.deleteGeofence(event.id);
       emit(DeleteTraccarGeofenceLoaded(previousState: currentMapState, success: success));
-      emit(currentMapState);
-
     } catch (e) {
       emit(MapError(message: "Failed to delete geofence: $e", previousState: currentMapState));
     }
   }
-  Future<void> _onGetTraccarNotificationTypes(
-      GetTraccarNotificationTypes event,
-      Emitter<MapState> emit,
-      ) async {
+
+  Future<void> _onGetTraccarNotificationTypes(GetTraccarNotificationTypes event, Emitter<MapState> emit) async {
     final currentState = _getLoadedState();
     emit(NotificationTypesLoading(previousState: currentState));
-
     try {
       final types = await Traccar.getNotificationTypes();
-
       if (types != null && types.isNotEmpty) {
-        emit(NotificationTypesLoaded(
-          previousState: currentState,
-          notificationTypes: types,
-        ));
+        emit(NotificationTypesLoaded(previousState: currentState, notificationTypes: types));
       } else {
-        emit(MapError(
-          message: 'No notification types found.',
-          previousState: currentState,
-        ));
+        emit(MapError(message: 'No notification types found.', previousState: currentState));
       }
     } catch (e) {
-      emit(MapError(
-        message: 'Failed to load notification types: $e',
-        previousState: currentState,
-      ));
+      emit(MapError(message: 'Failed to load notification types: $e', previousState: currentState));
     }
   }
 
-  Future<void> _onGetTraccarNotifications(GetTraccarNotifications event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onAddTraccarNotification(AddTraccarNotification event, Emitter<MapState> emit) async { /* ... */ }
-  Future<void> _onDeleteTraccarNotification(DeleteTraccarNotification event, Emitter<MapState> emit) async { /* ... */ }
+  Future<void> _onGetTraccarNotifications(GetTraccarNotifications event, Emitter<MapState> emit) async {
+    final currentState = _getLoadedState();
+    emit(NotificationsLoading(previousState: currentState));
+    try {
+      final notifications = await Traccar.getNotifications();
+      emit(NotificationsLoaded(previousState: currentState, notifications: notifications ?? []));
+    } catch (e) {
+      emit(MapError(message: 'Failed to load notifications: $e', previousState: currentState));
+    }
+  }
 
   // --- Helper & boilerplate methods ---
 

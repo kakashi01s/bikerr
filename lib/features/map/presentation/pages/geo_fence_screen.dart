@@ -80,8 +80,8 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
           CircleMarker(
             point: center,
             radius: radius,
-            color: isSelected ? Colors.orange.withOpacity(0.4) : Colors.green.withOpacity(0.3),
-            borderColor: isSelected ? Colors.orange : Colors.green,
+            color: isSelected ? Colors.orange.withOpacity(0.4) : AppColors.bikerrRedFill.withAlpha(50),
+            borderColor: isSelected ? Colors.orange : AppColors.bikerrRedStroke,
             borderStrokeWidth: isSelected ? 3 : 2,
           ),
         );
@@ -202,31 +202,16 @@ class _GeoFenceScreenState extends State<GeoFenceScreen> {
       backgroundColor: Colors.transparent,
       body: BlocListener<MapBloc, MapState>(
         listener: (context, state) {
+
           if (state is GeofencesLoaded) {
             _updateExistingGeofencesOnMap(state.geofences);
-          } else if (state is DeleteTraccarGeofenceLoaded && state.success) {
-            InteractiveToast.slide(
+          } else if (state is GeofencesLoading) {
 
-              context: context,
-              //leading: _leadingWidget(),
-              title: Center(
-                child: const Text(
-                  "Geo Fence Deleted",
-                  style: TextStyle(
-                    color: AppColors.bikerrRedFill,
-                    fontSize: 5
-                  ),
-                ),
-              ),
-             // trailing: _trailingWidget(),
-              toastStyle: const ToastStyle(titleLeadingGap: 10, backgroundColor: Colors.transparent),
-              toastSetting:const SlidingToastSetting(
-                animationDuration: Duration(seconds: 1),
-                displayDuration: Duration(seconds: 2),
-                toastStartPosition: ToastPosition.top,
-                toastAlignment: Alignment.topCenter,
-              ),
-            );
+
+          }
+
+          else if (state is DeleteTraccarGeofenceLoaded && state.success) {
+
             setState(() => _selectedGeofenceId = null);
             context.read<MapBloc>().add(GetTraccarGeofencesByDeviceId(widget.deviceId));
           } else if (state is MapError) {

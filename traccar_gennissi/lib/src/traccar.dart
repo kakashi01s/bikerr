@@ -25,7 +25,7 @@ class Traccar {
   static WebSocketChannel? _webSocket;
 
   static Map<String, String> get defaultHeaders => {
-    // 'Content-Type': 'application/json',
+     'Content-Type': 'application/json',
     if (sessionCookie != null) 'Cookie': sessionCookie!,
     if (_traccarToken != null) 'Authorization': 'Bearer $_traccarToken',
   };
@@ -315,25 +315,31 @@ class Traccar {
     return null;
   }
 
-  static Future<List?> getSendCommands(String id) async {
+  static Future<List<GetCommands>?> getSendCommands(String id) async {
     await loadSessionCookieAndBearerToken();
     try {
       final response = await http.get(
         Uri.parse('$serverURL/api/commands/types').replace(queryParameters: {
-        "deviceId" : '$id'
+          "deviceId": id,
         }),
         headers: defaultHeaders,
       );
+
       if (response.statusCode == 200) {
         print("getSendCommands: ${response.body}");
-        return List<Map<String,dynamic>>.from(json.decode(response.body));
+
+        final decoded = json.decode(response.body) as List;
+        return decoded.map((e) => GetCommands.fromJson(e)).toList();
       }
+
       print("getSendCommands failed: ${response.statusCode}");
     } catch (e) {
       print("Error in getSendCommands: $e");
     }
+
     return null;
   }
+
 
   static Future<List<RouteReport>?> getRoute(String deviceId, String from, String to) async {
     await loadSessionCookieAndBearerToken();
@@ -681,6 +687,7 @@ class Traccar {
         headers: defaultHeaders,
         body: notificationJson,
       );
+      print('[Traccar] Add traccar Notification ${response.body}');
       return response.statusCode == 200 ? response.body : null;
     } catch (e) {
       print("Error adding notification: $e");
@@ -702,13 +709,14 @@ class Traccar {
     }
   }
 
-  static Future<List<NotificationModel>?> getNotifications(String userId) async {
+  static Future<List<NotificationModel>?> getNotifications() async {
     await loadSessionCookieAndBearerToken();
     try {
-      final uri = Uri.parse('$serverURL/api/notifications?userId=$userId');
+      final uri = Uri.parse('$serverURL/api/notifications');
       final response = await http.get(uri, headers: defaultHeaders);
       if (response.statusCode == 200) {
         Iterable list = json.decode(response.body);
+        print('[Traccar] Get Traccar Notifications ${list}');
         return list.map((e) => NotificationModel.fromJson(e)).toList();
       }
       print("getNotifications failed: ${response.statusCode}");

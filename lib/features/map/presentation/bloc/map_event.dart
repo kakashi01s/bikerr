@@ -110,6 +110,7 @@ class GetLastKnownLocationForDevice extends MapEvent {
 // -- Traccar Command Events --
 class GetTraccarSendCommands extends MapEvent {
   final String id;
+
   const GetTraccarSendCommands(this.id);
   @override
   List<Object?> get props => [id];
@@ -255,8 +256,8 @@ class DeleteTraccarNotification extends MapEvent {
 }
 
 class GetTraccarNotifications extends MapEvent {
-  final String userId;
-  const GetTraccarNotifications(this.userId);
+
+  const GetTraccarNotifications();
   @override
-  List<Object?> get props => [userId];
+  List<Object?> get props => [];
 }

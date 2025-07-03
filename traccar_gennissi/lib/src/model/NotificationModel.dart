@@ -2,6 +2,7 @@
 class NotificationModel extends Object {
   int? id;
   Map<String, dynamic>? attributes;
+  String? description;
   int? calendarId;
   bool? always;
   String? type;
@@ -13,7 +14,8 @@ class NotificationModel extends Object {
     calendarId,
     always,
     type,
-    notificators
+    notificators,
+    description,
   });
 
   NotificationModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class NotificationModel extends Object {
     always = json["always"];
     type = json["type"];
     notificators = json["notificators"];
+    description = json["description"];
   }
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +34,7 @@ class NotificationModel extends Object {
     'calendarId':calendarId,
     'always':always,
     'type': type,
-    'notificators': notificators
+    'notificators': notificators,
+    'description':description
   };
 }

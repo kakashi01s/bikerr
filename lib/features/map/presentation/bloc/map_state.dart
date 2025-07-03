@@ -258,7 +258,7 @@ class SendCommandsLoading extends MapState {
 
 class SendCommandsLoaded extends MapState {
   final MapLoaded previousState;
-  final List<String> commandTypes;
+  final List<GetCommands> commandTypes;
   const SendCommandsLoaded({required this.previousState, required this.commandTypes});
   @override
   List<Object> get props => [previousState, commandTypes];
@@ -456,10 +456,10 @@ class NotificationsLoading extends MapState {
 
 class NotificationsLoaded extends MapState {
   final MapLoaded previousState;
-  final List<NotificationModel> notifications;
+  final List<NotificationModel>? notifications;
   const NotificationsLoaded({required this.previousState, required this.notifications});
   @override
-  List<Object> get props => [previousState, notifications];
+  List<Object?> get props => [previousState, notifications];
 }
 
 class AddTraccarNotificationLoading extends MapState {
