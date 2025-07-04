@@ -426,15 +426,23 @@ class Traccar {
     return null;
   }
 
-  static Future<Summary?> getSummary(String deviceId, String from, String to) async {
+  static Future<List<PositionModel>?> getSummary(String deviceId, String from, String to) async {
     await loadSessionCookieAndBearerToken();
     try {
-      final response = await http.get(
-        Uri.parse('$serverURL/api/reports/summary?deviceId=$deviceId&from=$from&to=$to'),
-        headers: defaultHeaders,
-      );
+      final uri  =
+        Uri.parse('$serverURL/api/positions').replace(queryParameters: {
+        'deviceId': '$deviceId',
+          'from':'$from',
+          'to':'$to'
+        });
+
+      final response = await http.get(uri, headers: defaultHeaders);
+
+      print("getSummary Response Status: ${response.statusCode}");
       if (response.statusCode == 200) {
-        return Summary.fromJson(json.decode(response.body));
+
+        Iterable list = json.decode(response.body);
+        return list.map((e) => PositionModel.fromJson(e)).toList();
       }
       print("getSummary failed: ${response.statusCode}");
     } catch (e) {
@@ -499,6 +507,7 @@ class Traccar {
         headers: defaultHeaders,
         body: deviceJson,
       );
+      print("[Traccar] Add Device Response Status: ${response.body}");
       return response.statusCode == 200 ? response.body : null;
     } catch (e) {
       print("Error adding device: $e");

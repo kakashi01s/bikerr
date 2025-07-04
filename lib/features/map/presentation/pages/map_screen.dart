@@ -9,9 +9,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:traccar_gennissi/traccar_gennissi.dart';
 
+import '../../../../services/session/session_manager.dart';
 import '../widgets/heading_cone_painter.dart';
 
 // LatLngTween class remains the same for smooth animations.
@@ -138,12 +140,24 @@ class _MapScreenState extends State<MapScreen>
         state is UpdateTraccarDeviceLoading ||
         state is AddTraccarDeviceLoading;
   }
-
+// NOTE: This logic is used in multiple places
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
-        appBar: const CustomAppBar(),
+        appBar: CustomAppBar(),
+        drawer: Drawer(
+          clipBehavior: Clip.hardEdge,
+          backgroundColor: AppColors.bikerrbgColor,
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              SizedBox(height: 80,),
+              drawerHeader(),
+              SizedBox(height: 20,),
+              drawerContent()
+
+            ])),
         body: Column(
           children: [
             // **MODIFIED**: ActionBar is now wrapped in a BlocBuilder here
@@ -170,6 +184,7 @@ class _MapScreenState extends State<MapScreen>
                 }
 
                 return ActionBar(
+                    onDrawerTap: () => Scaffold.of(context).openDrawer(),
                   onMessageTap: () => Navigator.pushNamed(context, RoutesName.conversationsScreen),
                   speedText: speedText,
                 );
@@ -408,9 +423,7 @@ class _MapScreenState extends State<MapScreen>
             icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
             onChanged: (id) {
               context.read<MapBloc>().add(TraccarDeviceSelected(id));
-              if (id != null) {
-                context.read<MapBloc>().add(GetTraccarSendCommands(id.toString()));
-              }
+
             },
             items: deviceIdToName.entries.map((entry) {
               return DropdownMenuItem<int?>(
@@ -506,20 +519,25 @@ class _MapScreenState extends State<MapScreen>
               _buildDetailRow(context, icon: Icons.speed_rounded, label: "Top Speed", value: "${topSpeed.toStringAsFixed(2)} km/h"),
               _buildDetailRow(context, icon: Icons.av_timer_rounded, label: "Avg Speed", value: "N/A"),
               const Divider(color: Colors.white24, height: 30),
-              _buildActionRow(context, icon: Icons.history_rounded, label: "Ride History", onTap: () => _showRideHistoryPicker(context, state)),
+              _buildActionRow(context, icon: Icons.history_rounded, label: "Ride History", onTap: () {
+                Navigator.of(context).popAndPushNamed(RoutesName.traccarDevicesSummaryScreen, arguments: {
+                  "deviceId":state.selectedDeviceId.toString()
+                });
+              }),
               _buildActionRow(context, icon: Icons.fence_rounded, label: "Geofences", onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).pushNamed(RoutesName.geoFenceScreen, arguments: {
                   "position": state.currentDevicePosition,
                   "deviceId": state.selectedDeviceId,
-                });
-              }),
+                    }
+                  );
+                }
+              ),
               _buildActionRow(context, icon: Icons.notification_add, label: "Notification Settings", onTap: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).pushNamed(RoutesName.traccarNotificationSettingsScreen, arguments: {
-                  "deviceId": state.selectedDeviceId,
-                });
-              }),
+                Navigator.of(context).pushNamed(RoutesName.traccarNotificationSettingsScreen);
+              }
+              ),
             ],
           ),
         );
@@ -562,5 +580,124 @@ class _MapScreenState extends State<MapScreen>
         ),
       ),
     );
+  }
+
+  drawerHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // User logo
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: SvgPicture.asset(
+              "assets/images/logo_user.svg",
+              height: 60,
+              width: 60,
+            ),
+          ),
+
+          // Spacer between logo and details
+          const SizedBox(width: 20),
+
+          // User details and edit icon
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Row for edit icon on the right
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top:1.0),
+                      child: const SizedBox(width: 1),
+                    ), // just for spacing on left if needed
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10.0),
+                      child: SvgPicture.asset(
+                        "assets/images/logo_edit.svg",
+                        height: 25,
+                        width: 25,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // User name
+                Text(
+                  "demo",
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                // Email
+                SizedBox(height: 2,),
+                Text(
+                  "nithik@nithi.com",
+                  style: const TextStyle(fontSize: 12),
+
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  drawerContent( ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        drawerItem("My Devices", "assets/images/logo_track.svg", () => Navigator.of(context).popAndPushNamed(RoutesName.traccarDevicesScreen)),
+        drawerItem("Notification Settings", "assets/images/logo_notification.svg", () => Navigator.of(context).popAndPushNamed(RoutesName.traccarNotificationSettingsScreen)),
+        drawerItem("Change Password", "assets/images/logo_padLock.svg", () {}),
+        drawerItem("Terms and Conditions", "assets/images/logo_document.svg", () {}),
+        drawerItem("Privacy Policy", "assets/images/logo_document.svg", () {}),
+        drawerItem("Logout", "assets/images/logo_logout.svg", () async {
+          await SessionManager.instance.clearSession();
+          if (context.mounted) { // Check if the widget is still mounted before navigation
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              RoutesName.loginScreen,
+                  (route) => false,
+            );
+          }
+        }),
+
+
+      ]
+    );
+  }
+
+
+  drawerItem(String titleText, String assetPath,VoidCallback onTap ){
+    return         //Device Notification Settings
+      GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18.0),
+          child: Container(
+
+            width: MediaQuery.of(context).size.width * 0.5,
+            child: Row(
+              children: [
+                // Drawer Item Logo
+                SvgPicture.asset(assetPath, height: 20,width: 20,color: Colors.white,),
+
+                SizedBox(width: 15,),
+                // Drawer Item Title
+                Text(titleText, style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),)
+              ],
+            ),
+          ),
+        ),
+      );
   }
 }

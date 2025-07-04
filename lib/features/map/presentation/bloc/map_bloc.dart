@@ -257,8 +257,12 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         traccarDeviceLastPosition: null,
       ));
     } else {
+      if (event.deviceId != null) {
+        add(GetTraccarSendCommands(event.deviceId.toString()));
+      }
       emit(currentLoadedState.copyWith(selectedDeviceId: event.deviceId));
       add(GetLastKnownLocationForDevice(event.deviceId!));
+
     }
   }
 
@@ -267,10 +271,10 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     emit(PositionByIdLoading(previousState: currentLoadedState));
     try {
       final device = _devices.firstWhere((d) => d.id == event.deviceId, orElse: () => Device());
-      if (device.id != null && device.lastPositionId != null) {
-        final positionModel = await Traccar.getPositionById(device.lastPositionId.toString());
-        final newMapState = currentLoadedState.copyWith(traccarDeviceLastPosition: positionModel);
-        emit(PositionByIdLoaded(previousState: newMapState, position: positionModel));
+      if (device.id != null && device.positionId != null) {
+        final positionModel = await Traccar.getPositionById(device.positionId.toString());
+
+        emit(currentLoadedState.copyWith(traccarDeviceLastPosition: positionModel));
       } else {
         emit(PositionByIdLoaded(previousState: currentLoadedState, position: null));
       }
@@ -295,10 +299,12 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   Future<void> _onAddTraccarDevice(AddTraccarDevice event, Emitter<MapState> emit) async {
     final currentMapState = _getLoadedState();
+    print('[Mapbloc]  Add Traccar Device    ${event.deviceJson}');
     emit(AddTraccarDeviceLoading(previousState: currentMapState));
     try {
       final result = await Traccar.addDevice(event.deviceJson);
       emit(AddTraccarDeviceLoaded(previousState: currentMapState, responseBody: result));
+      add(GetUserTraccarDevices());
     } catch (e) {
       emit(MapError(message: 'Failed to add device: $e', previousState: currentMapState));
     }
@@ -494,7 +500,9 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     final currentMapState = _getLoadedState();
     emit(ReportLoading(previousState: currentMapState));
     try {
+      print('[Mapbloc]  Get Traccar Summary    ${event.deviceId} ${event.from} ${event.to}');
       final summary = await Traccar.getSummary(event.deviceId, event.from, event.to);
+      print('[Mapbloc]  Get Traccar Summary    ${summary}');
       emit(SummaryReportLoaded(previousState: currentMapState, summary: summary));
     } catch (e) {
       emit(MapError(message: 'Failed to fetch summary report: $e', previousState: currentMapState));

@@ -90,6 +90,11 @@ class MapLoaded extends MapState {
   ];
 }
 
+
+// Traccar add device Text-field states
+
+
+
 // --- Feature-Specific States ---
 
 // --- User / Session ---
@@ -321,7 +326,7 @@ class StopsReportLoaded extends MapState {
 
 class SummaryReportLoaded extends MapState {
   final MapLoaded previousState;
-  final Summary? summary;
+  final List<PositionModel>? summary;
   const SummaryReportLoaded({required this.previousState, this.summary});
   @override
   List<Object?> get props => [previousState, summary];

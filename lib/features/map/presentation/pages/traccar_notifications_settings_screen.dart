@@ -7,8 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:traccar_gennissi/traccar_gennissi.dart';
 
 class TraccarNotificationSettingsScreen extends StatefulWidget {
-  final int deviceId;
-  const TraccarNotificationSettingsScreen({super.key, required this.deviceId});
+  const TraccarNotificationSettingsScreen({super.key});
 
   @override
   State<TraccarNotificationSettingsScreen> createState() =>

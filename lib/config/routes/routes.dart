@@ -17,10 +17,15 @@ import 'package:bikerr/features/conversations/presentation/pages/join_new_conver
 import 'package:bikerr/features/map/presentation/bloc/map_bloc.dart';
 import 'package:bikerr/features/map/presentation/pages/geo_fence_screen.dart';
 import 'package:bikerr/features/map/presentation/pages/map_screen.dart';
+import 'package:bikerr/features/map/presentation/pages/traccar_device_smmary_screen.dart';
 import 'package:bikerr/features/map/presentation/pages/traccar_notifications_settings_screen.dart';
+import 'package:bikerr/features/map/presentation/pages/traccar_route_playblack_screen.dart';
 import 'package:bikerr/utils/di/service_locator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:traccar_gennissi/traccar_gennissi.dart';
+
+import '../../features/map/presentation/pages/traccar_devices_screen.dart';
 
 class Routes {
   final BaseBloc baseBloc = BaseBloc();
@@ -40,19 +45,34 @@ class Routes {
          final arguments = settings.arguments as Map<String, dynamic>?;
          final position = arguments?['position'];
          final deviceId = arguments?['deviceId'];
-
         return MaterialPageRoute(builder: (context) => BlocProvider.value(
             value: sl<MapBloc>(),
             child: GeoFenceScreen(position: position, deviceId: deviceId, )
         ));
-
         case RoutesName.traccarNotificationSettingsScreen:
-         final arguments = settings.arguments as Map<String, dynamic>?;
-         final deviceId = arguments?['deviceId'];
-
         return MaterialPageRoute(builder: (context) => BlocProvider.value(
             value: sl<MapBloc>(),
-            child: TraccarNotificationSettingsScreen( deviceId: deviceId, )
+            child: TraccarNotificationSettingsScreen( )
+        ));
+        case RoutesName.traccarDevicesSummaryScreen:
+          final arguments = settings.arguments as Map<String, dynamic>?;
+          final deviceId = arguments?['deviceId'];
+        return MaterialPageRoute(builder: (context) => BlocProvider.value(
+            value: sl<MapBloc>(),
+            child: TraccarDeviceSummaryScreen(deviceId: deviceId,)
+        ));
+        case RoutesName.traccarSummaryPlaybackScreen:
+          final args = settings.arguments as Map<String, dynamic>?;
+
+          final positions = args?['positions'] as List<PositionModel>? ?? [];
+        return MaterialPageRoute(builder: (context) => BlocProvider.value(
+            value: sl<MapBloc>(),
+            child: TraccarSummaryPlaybackScreen( positions: positions,)
+        ));
+        case RoutesName.traccarDevicesScreen:
+        return MaterialPageRoute(builder: (context) => BlocProvider.value(
+            value: sl<MapBloc>(),
+            child: TraccarDevicesScreen()
         ));
       case RoutesName.mapScreen:
         return MaterialPageRoute(builder: (context) {

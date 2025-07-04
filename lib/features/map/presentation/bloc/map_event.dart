@@ -51,6 +51,7 @@ class StopTraccarWebSocket extends MapEvent {}
 // -- Traccar Device Events --
 class GetUserTraccarDevices extends MapEvent {}
 
+
 class GetTraccarDeviceById extends MapEvent {
   final String id;
   const GetTraccarDeviceById(this.id);

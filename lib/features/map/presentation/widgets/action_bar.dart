@@ -5,12 +5,13 @@ import 'package:flutter_svg/svg.dart';
 
 class ActionBar extends StatelessWidget {
   final VoidCallback onMessageTap;
+  final VoidCallback onDrawerTap;
   final String? speedText; // Receives the final, formatted speed string
 
   const ActionBar({
     super.key,
     required this.onMessageTap,
-    this.speedText,
+    this.speedText, required this.onDrawerTap,
   });
 
   @override
@@ -27,7 +28,11 @@ class ActionBar extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 20.0),
-                child: SvgPicture.asset(AppLogos.drawer, height: 30),
+                child: GestureDetector(
+                    onTap: onDrawerTap,
+                    child: SvgPicture.asset(AppLogos.drawer, height: 30)
+
+                ),
               ),
               Row(
                 children: [

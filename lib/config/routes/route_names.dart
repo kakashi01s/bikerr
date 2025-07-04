@@ -15,5 +15,8 @@ class RoutesName {
   static const String createChatGroupsScreen = 'create_chat_group_screen';
   static const String geoFenceScreen = 'geo_fence_screen';
   static const String traccarNotificationSettingsScreen = 'traccar_notification_settings_screen';
+  static const String traccarDevicesScreen = 'traccar_devices_screen';
+  static const String traccarDevicesSummaryScreen = 'traccar_devices_summary_screen';
+  static const String traccarSummaryPlaybackScreen = 'traccar_summary_playback_screen';
 
 }

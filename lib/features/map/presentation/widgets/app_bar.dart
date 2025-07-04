@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const CustomAppBar({super.key});
+  const CustomAppBar( {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,14 +29,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
           GestureDetector(
             child: SvgPicture.asset(AppLogos.profile, height: 50),
             onTap: () async {
-              await SessionManager.instance.clearSession();
-              if (context.mounted) { // Check if the widget is still mounted before navigation
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  RoutesName.loginScreen,
-                      (route) => false,
-                );
-              }
+
             },
           ),
         ],
